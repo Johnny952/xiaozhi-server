@@ -1,1 +1,7 @@
 .superpowers/
+server/.env
+**/config.db
+**/.config.yaml
+**/logs/
+**/tmp/
+server/xiaozhi-server-go/ota_bin/*.bin
