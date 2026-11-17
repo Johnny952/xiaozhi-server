@@ -1,0 +1,26 @@
+services:
+  xiaozhi:
+    build: ./xiaozhi-server-go
+    image: xiaozhi-server:dev
+    entrypoint: ["/config/entrypoint.sh"]
+    env_file: .env
+    environment:
+      TZ: America/Santiago
+    volumes:
+      - ./xiaozhi:/config:ro
+    ports:
+      - "${LAN_IP}:8100:8000"
+      - "${LAN_IP}:8180:8080"
+    # Egress blackhole: the template still selects external providers
+    # (ASR/TTS/VLLLM). Privacy rule: nothing leaves the LAN except DeepSeek
+    # (via LiteLLM), so resolve their API hosts to 0.0.0.0 to make them fail.
+    extra_hosts:
+      - "openspeech.bytedance.com:0.0.0.0"
+      - "open.bigmodel.cn:0.0.0.0"
+      - "speech.platform.bing.com:0.0.0.0"
+    networks:
+      - xiaozhi-net
+    restart: unless-stopped
+
+networks:
+  xiaozhi-net:

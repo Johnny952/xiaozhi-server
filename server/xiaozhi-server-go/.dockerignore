@@ -1,0 +1,6 @@
+.git
+ota_bin/*.bin
+logs
+tmp
+config.db
+.config.yaml
