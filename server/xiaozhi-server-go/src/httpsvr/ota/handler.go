@@ -1,13 +1,14 @@
 package ota
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -228,6 +229,15 @@ func (s *DefaultOTAService) handlePostOTA(c *gin.Context) {
 		return
 	}
 
+	// 记录设备上报的原始请求体（用于了解设备的 board / 分区信息），随后还原供后续解析
+	rawBody, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "读取请求体失败: " + err.Error()})
+		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
+	utils.DefaultLogger.Info("[OTA] body device=%s raw=%s", deviceID, string(rawBody))
+
 	var raw map[string]interface{}
 	if err := c.ShouldBindJSON(&raw); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "解析失败: " + err.Error()})
@@ -244,25 +254,15 @@ func (s *DefaultOTAService) handlePostOTA(c *gin.Context) {
 		version = "1.0.0"
 	}
 
-	otaDir := filepath.Join(".", "ota_bin")
-	_ = os.MkdirAll(otaDir, 0755)
-	bins, _ := filepath.Glob(filepath.Join(otaDir, "*.bin"))
+	// 私有部署：永不向设备下发固件，始终返回设备当前版本与空 URL
 	firmwareURL := ""
-	if len(bins) > 0 {
-		sort.Slice(bins, func(i, j int) bool {
-			return versionLess(bins[j], bins[i])
-		})
-		latest := filepath.Base(bins[0])
-		version = strings.TrimSuffix(latest, ".bin")
-		firmwareURL = "/ota_bin/" + latest
-	}
 	cfg := configs.Cfg
 	updateURL := cfg.Web.Websocket
 	deviceName := req.Board.Name
 	s.CheckAndUpdateDevice(c, cfg, req, deviceID, client_id, deviceName, version)
 	resp := OtaFirmwareResponse{}
 	resp.ServerTime.Timestamp = time.Now().UnixNano() / 1e6
-	resp.ServerTime.TimezoneOffset = 8 * 60
+	resp.ServerTime.TimezoneOffset = -180 // 智利 (UTC-3)
 	resp.Firmware.Version = version
 	resp.Firmware.URL = firmwareURL
 	resp.Websocket.URL = updateURL
