@@ -8,6 +8,7 @@ package nctest
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -43,6 +45,7 @@ type Fake struct {
 	mutations []mutation
 	routes    []route
 	modified  time.Time
+	cs        calState
 }
 
 type mutation struct {
@@ -136,6 +139,10 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	switch {
+	case strings.HasPrefix(r.URL.Path, f.calHome()) || r.URL.Path+"/" == f.calHome():
+		f.caldav(w, r)
+	case strings.HasPrefix(r.URL.Path, notesPrefix):
+		f.notesAPI(w, r)
 	case r.Method == "SEARCH" && strings.HasPrefix(r.URL.Path, "/remote.php/dav"):
 		f.search(w, r)
 	case strings.HasPrefix(r.URL.Path, f.filesPrefix()):
@@ -321,4 +328,404 @@ func escape(p string) string {
 		segs[i] = url.PathEscape(s)
 	}
 	return strings.Join(segs, "/")
+}
+
+// ---------------------------------------------------------------------------
+// CalDAV and Notes (in memory)
+// ---------------------------------------------------------------------------
+
+// FakeCal is a calendar-home child. Kind is "calendar" (default),
+// "addressbook" or "other" (a plain collection).
+type FakeCal struct {
+	ID      string
+	Name    string
+	Kind    string
+	Comps   []string // e.g. VEVENT, VTODO
+	Objects map[string]string
+}
+
+// FakeNote is a note in the Notes API.
+type FakeNote struct {
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Content  string `json:"content"`
+	Category string `json:"category"`
+	ETag     string `json:"etag"`
+	Modified int64  `json:"modified"`
+}
+
+type calState struct {
+	cals         []*FakeCal
+	LastReport   string
+	LastDelete   http.Header
+	notes        map[int64]*FakeNote
+	nextNote     int64
+	noteVersions int64
+}
+
+// AddCalendar registers a calendar with the given supported components.
+func (f *Fake) AddCalendar(id, name string, comps ...string) *FakeCal {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c := &FakeCal{ID: id, Name: name, Kind: "calendar", Comps: comps, Objects: map[string]string{}}
+	f.cs.cals = append(f.cs.cals, c)
+	return c
+}
+
+// AddCollection registers a non-calendar collection (Kind "addressbook" or "other").
+func (f *Fake) AddCollection(id, name, kind string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cs.cals = append(f.cs.cals, &FakeCal{ID: id, Name: name, Kind: kind, Objects: map[string]string{}})
+}
+
+// Cal returns the calendar with id, or nil.
+func (f *Fake) Cal(id string) *FakeCal {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calLocked(id)
+}
+
+func (f *Fake) calLocked(id string) *FakeCal {
+	for _, c := range f.cs.cals {
+		if c.ID == id {
+			return c
+		}
+	}
+	return nil
+}
+
+// LastReportBody is the body of the most recent REPORT request.
+func (f *Fake) LastReportBody() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cs.LastReport
+}
+
+// LastDeleteHeader is the header of the most recent calendar DELETE.
+func (f *Fake) LastDeleteHeader() http.Header {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cs.LastDelete
+}
+
+// AddNote inserts a note and returns it.
+func (f *Fake) AddNote(title, content string) *FakeNote {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.addNoteLocked(title, content, "")
+}
+
+// Note returns the note with id, or nil. Tests may mutate it directly while
+// no request is in flight.
+func (f *Fake) Note(id int64) *FakeNote {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cs.notes[id]
+}
+
+func (f *Fake) addNoteLocked(title, content, category string) *FakeNote {
+	if f.cs.notes == nil {
+		f.cs.notes = map[int64]*FakeNote{}
+	}
+	f.cs.nextNote++
+	n := &FakeNote{ID: f.cs.nextNote, Title: title, Content: content, Category: category}
+	f.touchNote(n)
+	f.cs.notes[n.ID] = n
+	return n
+}
+
+func (f *Fake) touchNote(n *FakeNote) {
+	f.cs.noteVersions++
+	n.Modified = f.modified.Unix() + f.cs.noteVersions
+	h := sha256.Sum256([]byte(fmt.Sprintf("%d|%s|%s|%d", n.ID, n.Title, n.Content, f.cs.noteVersions)))
+	n.ETag = hex.EncodeToString(h[:8])
+}
+
+func (f *Fake) calHome() string { return "/remote.php/dav/calendars/" + url.PathEscape(f.User) + "/" }
+
+func (f *Fake) caldav(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rest := strings.TrimPrefix(r.URL.Path, f.calHome())
+	rest = strings.Trim(rest, "/")
+	parts := strings.SplitN(rest, "/", 2)
+	calID, obj := parts[0], ""
+	if len(parts) == 2 {
+		obj = parts[1]
+	}
+	switch {
+	case r.Method == "PROPFIND" && calID == "":
+		f.calHomePropfind(w)
+	case r.Method == "MKCALENDAR" && obj == "":
+		body, _ := io.ReadAll(r.Body)
+		if f.calLocked(calID) != nil {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		c := &FakeCal{ID: calID, Name: calID, Kind: "calendar", Objects: map[string]string{}}
+		if m := regexp.MustCompile(`(?s)<(?:\w+:)?displayname>(.*?)</(?:\w+:)?displayname>`).FindSubmatch(body); m != nil {
+			var v struct {
+				S string `xml:",chardata"`
+			}
+			if xml.Unmarshal([]byte("<x>"+string(m[1])+"</x>"), &v) == nil {
+				c.Name = v.S
+			}
+		}
+		for _, m := range regexp.MustCompile(`<(?:\w+:)?comp\s+name="([A-Z]+)"`).FindAllSubmatch(body, -1) {
+			c.Comps = append(c.Comps, string(m[1]))
+		}
+		f.cs.cals = append(f.cs.cals, c)
+		w.WriteHeader(http.StatusCreated)
+	default:
+		c := f.calLocked(calID)
+		if c == nil {
+			http.NotFound(w, r)
+			return
+		}
+		f.calObject(w, r, c, obj)
+	}
+}
+
+func (f *Fake) calObject(w http.ResponseWriter, r *http.Request, c *FakeCal, name string) {
+	switch {
+	case r.Method == "REPORT" && name == "":
+		body, _ := io.ReadAll(r.Body)
+		f.cs.LastReport = string(body)
+		f.report(w, c, string(body))
+	case r.Method == http.MethodGet && name != "":
+		data, ok := c.Objects[name]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("ETag", etagOf([]byte(data)))
+		w.Header().Set("Content-Type", "text/calendar")
+		io.WriteString(w, data)
+	case r.Method == http.MethodPut && name != "":
+		body, _ := io.ReadAll(r.Body)
+		cur, exists := c.Objects[name]
+		if r.Header.Get("If-None-Match") == "*" && exists {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		if im := r.Header.Get("If-Match"); im != "" && (!exists || etagOf([]byte(cur)) != im) {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		c.Objects[name] = string(body)
+		w.Header().Set("ETag", etagOf(body))
+		if exists {
+			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
+	case r.Method == http.MethodDelete && name != "":
+		f.cs.LastDelete = r.Header.Clone()
+		cur, exists := c.Objects[name]
+		if !exists {
+			http.NotFound(w, r)
+			return
+		}
+		if im := r.Header.Get("If-Match"); im != "" && etagOf([]byte(cur)) != im {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		delete(c.Objects, name)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (f *Fake) calHomePropfind(w http.ResponseWriter) {
+	var sb strings.Builder
+	sb.WriteString(`<?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:card="urn:ietf:params:xml:ns:carddav">`)
+	fmt.Fprintf(&sb, `<d:response><d:href>%s</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`, f.calHome())
+	cals := append([]*FakeCal(nil), f.cs.cals...)
+	sort.Slice(cals, func(i, j int) bool { return cals[i].ID < cals[j].ID })
+	for _, c := range cals {
+		rt := "<d:collection/>"
+		comps := ""
+		switch c.Kind {
+		case "addressbook":
+			rt += "<card:addressbook/>"
+		case "other":
+		default:
+			rt += "<c:calendar/>"
+			comps = "<c:supported-calendar-component-set>"
+			for _, n := range c.Comps {
+				comps += `<c:comp name="` + n + `"/>`
+			}
+			comps += "</c:supported-calendar-component-set>"
+		}
+		fmt.Fprintf(&sb, `<d:response><d:href>%s%s/</d:href><d:propstat><d:prop><d:displayname>%s</d:displayname><d:resourcetype>%s</d:resourcetype>%s</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`,
+			f.calHome(), url.PathEscape(c.ID), xmlEsc(c.Name), rt, comps)
+	}
+	sb.WriteString(`</d:multistatus>`)
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.WriteHeader(http.StatusMultiStatus)
+	io.WriteString(w, sb.String())
+}
+
+func xmlEsc(s string) string {
+	var b strings.Builder
+	xml.EscapeText(&b, []byte(s))
+	return b.String()
+}
+
+var (
+	compFilterRe = regexp.MustCompile(`<(?:\w+:)?comp-filter\s+name="([A-Z]+)"`)
+	timeRangeRe  = regexp.MustCompile(`<(?:\w+:)?time-range\s+start="([^"]+)"\s+end="([^"]+)"`)
+)
+
+func (f *Fake) report(w http.ResponseWriter, c *FakeCal, body string) {
+	comp := ""
+	if ms := compFilterRe.FindAllStringSubmatch(body, -1); len(ms) >= 2 {
+		comp = ms[1][1]
+	}
+	var from, to time.Time
+	ranged := false
+	if m := timeRangeRe.FindStringSubmatch(body); m != nil {
+		a, e1 := time.Parse("20060102T150405Z", m[1])
+		b, e2 := time.Parse("20060102T150405Z", m[2])
+		if e1 == nil && e2 == nil {
+			from, to, ranged = a, b, true
+		}
+	}
+	names := make([]string, 0, len(c.Objects))
+	for n := range c.Objects {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var sb strings.Builder
+	sb.WriteString(`<?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">`)
+	for _, n := range names {
+		data := c.Objects[n]
+		if comp != "" && !strings.Contains(data, "BEGIN:"+comp) {
+			continue
+		}
+		if ranged && !overlaps(data, from, to) {
+			continue
+		}
+		fmt.Fprintf(&sb, `<d:response><d:href>%s%s/%s</d:href><d:propstat><d:prop><d:getetag>%s</d:getetag><c:calendar-data>%s</c:calendar-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`,
+			f.calHome(), url.PathEscape(c.ID), url.PathEscape(n), etagOf([]byte(data)), xmlEsc(data))
+	}
+	sb.WriteString(`</d:multistatus>`)
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.WriteHeader(http.StatusMultiStatus)
+	io.WriteString(w, sb.String())
+}
+
+func icalProp(data, name string) (time.Time, bool) {
+	for _, line := range strings.Split(strings.ReplaceAll(data, "\r\n", "\n"), "\n") {
+		if !strings.HasPrefix(line, name+":") && !strings.HasPrefix(line, name+";") {
+			continue
+		}
+		i := strings.LastIndex(line, ":")
+		v := strings.TrimSpace(line[i+1:])
+		for _, layout := range []string{"20060102T150405Z", "20060102T150405", "20060102"} {
+			if t, err := time.Parse(layout, v); err == nil {
+				return t, true
+			}
+		}
+	}
+	return time.Time{}, false
+}
+
+// overlaps is a simple DTSTART/DTEND/DUE overlap test; objects without any
+// date always match (like an undated VTODO).
+func overlaps(data string, from, to time.Time) bool {
+	start, ok := icalProp(data, "DTSTART")
+	due, hasDue := icalProp(data, "DUE")
+	if !ok {
+		if !hasDue {
+			return true
+		}
+		start = due
+	}
+	end := start
+	if e, ok := icalProp(data, "DTEND"); ok {
+		end = e
+	} else if hasDue {
+		end = due
+	}
+	return start.Before(to) && !end.Before(from)
+}
+
+const notesPrefix = "/index.php/apps/notes/api/v1/notes"
+
+func (f *Fake) notesAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("OCS-APIRequest") != "true" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, notesPrefix), "/")
+	writeJSON := func(code int, v any) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		json.NewEncoder(w).Encode(v)
+	}
+	if rest == "" {
+		switch r.Method {
+		case http.MethodGet:
+			list := []*FakeNote{}
+			ids := make([]int64, 0, len(f.cs.notes))
+			for id := range f.cs.notes {
+				ids = append(ids, id)
+			}
+			sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+			for _, id := range ids {
+				list = append(list, f.cs.notes[id])
+			}
+			writeJSON(http.StatusOK, list)
+		case http.MethodPost:
+			var in struct{ Title, Content, Category string }
+			if json.NewDecoder(r.Body).Decode(&in) != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			writeJSON(http.StatusOK, f.addNoteLocked(in.Title, in.Content, in.Category))
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+		return
+	}
+	id, err := strconv.ParseInt(rest, 10, 64)
+	n := f.cs.notes[id]
+	if err != nil || n == nil {
+		http.NotFound(w, r)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		w.Header().Set("ETag", `"`+n.ETag+`"`)
+		writeJSON(http.StatusOK, n)
+	case http.MethodPut:
+		if im := strings.Trim(r.Header.Get("If-Match"), `"`); r.Header.Get("If-Match") != "" && im != n.ETag {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		var in struct {
+			Content *string `json:"content"`
+			Title   *string `json:"title"`
+		}
+		if json.NewDecoder(r.Body).Decode(&in) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if in.Content != nil {
+			n.Content = *in.Content
+		}
+		if in.Title != nil {
+			n.Title = *in.Title
+		}
+		f.touchNote(n)
+		w.Header().Set("ETag", `"`+n.ETag+`"`)
+		writeJSON(http.StatusOK, n)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
