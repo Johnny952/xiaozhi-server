@@ -265,3 +265,19 @@ func TestBasicAuthAndNoCredsInErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSearchNameEscapesLikeWildcards(t *testing.T) {
+	c, f := setup(t)
+	f.Files["/100%_real.txt"] = []byte("a")
+	f.Files["/100xyreal.txt"] = []byte("b")
+	es, err := c.SearchName(context.Background(), "100%_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(es) != 1 || es[0].Path != "/100%_real.txt" {
+		t.Fatalf("entries = %+v", es)
+	}
+	if b := f.LastSearchBody(); !strings.Contains(b, `%100\%\_%`) {
+		t.Fatalf("search body lacks escaped literal: %s", b)
+	}
+}

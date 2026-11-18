@@ -9,6 +9,9 @@ import (
 // containing q; else nil.
 func Find(titles []string, q string) []int {
 	nq := Normalize(q)
+	if nq == "" {
+		return nil // an empty query would match every title
+	}
 	var exact, contains []int
 	for i, t := range titles {
 		nt := Normalize(t)

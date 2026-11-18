@@ -357,3 +357,72 @@ func TestTareasPendientesSinProyectoParallelMax4(t *testing.T) {
 		t.Errorf("max concurrency %d, want 2..%d", maxSeen, maxParallel)
 	}
 }
+
+func TestEmptyRefMutatesNothing(t *testing.T) {
+	d, f := newDeps(t)
+	c := f.AddCalendar("casa", "Casa", "VTODO")
+	c.Objects["a.ics"] = todoICS("a", "Regar", nil, false, 5, "")
+	p := f.AddCalendar("personal", "Personal", "VEVENT")
+	p.Objects["e.ics"] = veventICS("e", "Dentista", "20261119T120000Z", "20261119T130000Z")
+	before := f.Cal("casa").Objects["a.ics"]
+	for _, ref := range []string{"¿?", "", "  ...  "} {
+		for _, tc := range []struct {
+			tool string
+			args map[string]any
+		}{
+			{"tarea_completar", map[string]any{"proyecto": "Casa", "tarea": ref}},
+			{"tarea_anotar", map[string]any{"proyecto": "Casa", "tarea": ref, "texto": "x"}},
+			{"evento_cancelar", map[string]any{"evento": ref}},
+		} {
+			out, isErr := call(t, All(d), tc.tool, tc.args)
+			if ref == "" {
+				continue // missing-arg path, not the normalization path
+			}
+			if !isErr || !strings.Contains(out, "Dime cuál") {
+				t.Errorf("%s %q: want 'Dime cuál' error, got %v %q", tc.tool, ref, isErr, out)
+			}
+		}
+	}
+	if f.Cal("casa").Objects["a.ics"] != before {
+		t.Error("task was mutated")
+	}
+	if _, err := d.Confirm.Take("4821"); err == nil {
+		t.Error("no pending confirmation expected")
+	}
+}
+
+func TestTareaCrearProyectoCollisionReusesCalendar(t *testing.T) {
+	d, f := newDeps(t)
+	f.AddCalendar("joyeria", "Taller de joyas", "VTODO") // slug taken, name differs
+	out, isErr := call(t, All(d), "tarea_crear", map[string]any{
+		"proyecto": "Joyería", "titulo": "Comprar alambre", "crear_proyecto": true,
+	})
+	if isErr {
+		t.Fatal(out)
+	}
+	if n := len(f.Cal("joyeria").Objects); n != 1 {
+		t.Fatalf("objects in existing calendar: %d (%s)", n, out)
+	}
+}
+
+func TestListsCappedAtTen(t *testing.T) {
+	d, f := newDeps(t)
+	c := f.AddCalendar("casa", "Casa", "VTODO")
+	for i := 0; i < 13; i++ {
+		id := string(rune('a' + i))
+		c.Objects[id+".ics"] = todoICS(id, "Tarea "+id, nil, false, 5, "")
+	}
+	out, isErr := call(t, All(d), "tareas_pendientes", map[string]any{})
+	if isErr {
+		t.Fatal(out)
+	}
+	mustContain(t, out, "y 3 más")
+}
+
+func TestNewUIDFormat(t *testing.T) {
+	u := newUID()
+	n, ok := strings.CutSuffix(u, "@xiaozhi-nextcloud")
+	if !ok || n == "" || strings.Trim(n, "0123456789") != "" {
+		t.Errorf("uid %q", u)
+	}
+}

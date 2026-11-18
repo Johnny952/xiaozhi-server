@@ -2,8 +2,6 @@ package tools
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -20,6 +18,9 @@ import (
 
 // maxAgendaDays is the widest range agenda accepts.
 const maxAgendaDays = 31
+
+// maxListItems caps how many items a spoken list reads out (spec: 10).
+const maxListItems = 10
 
 // calEvent is one (possibly expanded) event instance with its origin.
 type calEvent struct {
@@ -227,11 +228,7 @@ func (d *Deps) fmtEvent(e calEvent) string {
 }
 
 func newUID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return fmt.Sprintf("nc-mcp-%d", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
+	return fmt.Sprintf("%d@xiaozhi-nextcloud", time.Now().UnixNano())
 }
 
 func parseDay(s string, loc *time.Location) (time.Time, error) {
@@ -284,7 +281,7 @@ func (d *Deps) agenda(ctx context.Context, req mcp.CallToolRequest) *mcp.CallToo
 	for i, e := range evs {
 		lines[i] = d.fmtEvent(e)
 	}
-	return ok("Agenda " + label + ": " + text.List(lines, 20))
+	return ok("Agenda " + label + ": " + text.List(lines, maxListItems))
 }
 
 var repetirRules = map[string]string{
@@ -412,6 +409,9 @@ func (d *Deps) eventoCancelar(ctx context.Context, req mcp.CallToolRequest) *mcp
 		return r
 	}
 	ref := str(req, "evento")
+	if text.Normalize(ref) == "" {
+		return fail("No entendí qué evento quieres cancelar. Dime cuál.")
+	}
 	today := dayStart(d.now())
 	from, to := today.AddDate(0, 0, -30), today.AddDate(0, 0, 366)
 	if f := str(req, "fecha"); f != "" {
@@ -542,7 +542,7 @@ func (d *Deps) resumenDelDia(ctx context.Context, req mcp.CallToolRequest) *mcp.
 		for i, e := range evs {
 			lines[i] = d.fmtEvent(e)
 		}
-		b.WriteString("Eventos: " + text.List(lines, 15) + ". ")
+		b.WriteString("Eventos: " + text.List(lines, maxListItems) + ". ")
 	}
 	if len(items) == 0 {
 		b.WriteString("Tareas: nada urgente.")
@@ -551,7 +551,7 @@ func (d *Deps) resumenDelDia(ctx context.Context, req mcp.CallToolRequest) *mcp.
 		for i, it := range items {
 			lines[i] = it.line
 		}
-		b.WriteString("Tareas: " + text.List(lines, 15) + ".")
+		b.WriteString("Tareas: " + text.List(lines, maxListItems) + ".")
 	}
 	return ok(b.String())
 }

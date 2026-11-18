@@ -143,3 +143,11 @@ func TestParsePriority(t *testing.T) {
 		}
 	}
 }
+
+func TestFindEmptyQueryMatchesNothing(t *testing.T) {
+	for _, q := range []string{"", "¿?", "  "} {
+		if got := Find([]string{"a", "b"}, q); got != nil {
+			t.Errorf("Find(%q) = %v", q, got)
+		}
+	}
+}

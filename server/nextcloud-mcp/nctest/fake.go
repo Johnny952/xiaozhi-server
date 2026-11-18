@@ -32,6 +32,8 @@ type Fake struct {
 	User string
 	Pass string // expected basic-auth password
 
+	lastSearch string
+
 	Files map[string][]byte // key: path relative to the user root, e.g. "/Notas/a.md"
 	Dirs  map[string]bool   // folders, e.g. "/Notas"
 
@@ -260,6 +262,9 @@ var limitRe = regexp.MustCompile(`<(?:\w+:)?nresults>(\d+)</(?:\w+:)?nresults>`)
 
 func (f *Fake) search(w http.ResponseWriter, r *http.Request) {
 	raw, _ := io.ReadAll(r.Body)
+	f.mu.Lock()
+	f.lastSearch = string(raw)
+	f.mu.Unlock()
 	m := likeRe.FindSubmatch(raw)
 	if m == nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -274,7 +279,7 @@ func (f *Fake) search(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		needle = strings.ToLower(strings.Trim(v.S, "%"))
+		needle = strings.ToLower(unlike(strings.TrimSuffix(strings.TrimPrefix(v.S, "%"), "%")))
 	}
 	limit := 1 << 30
 	if lm := limitRe.FindSubmatch(raw); lm != nil {
@@ -751,4 +756,23 @@ func (f *Fake) notesAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+// unlike resolves backslash escapes (\%, \_, \\) of a LIKE literal.
+func unlike(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			i++
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// LastSearchBody is the body of the most recent SEARCH request.
+func (f *Fake) LastSearchBody() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastSearch
 }

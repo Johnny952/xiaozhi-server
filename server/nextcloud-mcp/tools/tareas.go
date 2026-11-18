@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -81,6 +82,18 @@ func tareaTools(d *Deps) []Tool {
 
 // findProject looks name up among the task calendars. On a miss it returns
 // the voice error listing the existing projects.
+// findCollision finds the todo-capable calendar a failed MKCALENDAR collided
+// with, by slug or display name.
+func findCollision(all []nc.Calendar, name string) (nc.Calendar, bool) {
+	slug := text.Slug(name)
+	for _, c := range all {
+		if c.Todos && (c.ID == slug || text.Normalize(c.Name) == text.Normalize(name)) {
+			return c, true
+		}
+	}
+	return nc.Calendar{}, false
+}
+
 func (d *Deps) findProject(ctx context.Context, name string) (nc.Calendar, bool, *mcp.CallToolResult) {
 	all, err := d.NC.Calendars(ctx)
 	if err != nil {
@@ -111,6 +124,9 @@ func (d *Deps) pickTodo(todos []calTodo, ref, what string, preferOpen bool) (cal
 	titles := make([]string, len(todos))
 	for i, t := range todos {
 		titles[i] = t.Summary
+	}
+	if text.Normalize(ref) == "" {
+		return calTodo{}, fail("No entendí cuál " + what + " dices. Dime cuál.")
 	}
 	idx := text.Find(titles, ref)
 	if len(idx) == 0 {
@@ -221,7 +237,7 @@ func (d *Deps) tareasPendientes(ctx context.Context, req mcp.CallToolRequest) *m
 	if len(lines) == 0 {
 		return ok("No hay tareas pendientes" + scope + ".")
 	}
-	return ok(fmt.Sprintf("Tareas pendientes%s (%d): %s.", scope, len(lines), text.List(lines, 20)))
+	return ok(fmt.Sprintf("Tareas pendientes%s (%d): %s.", scope, len(lines), text.List(lines, maxListItems)))
 }
 
 func (d *Deps) tareaCrear(ctx context.Context, req mcp.CallToolRequest) *mcp.CallToolResult {
@@ -251,10 +267,24 @@ func (d *Deps) tareaCrear(ctx context.Context, req mcp.CallToolRequest) *mcp.Cal
 		if dentro != "" {
 			return fail("El proyecto " + proyecto + " no existe, así que no tiene la tarea padre " + dentro + ".")
 		}
-		if cal, err = d.NC.MkCalendarTodos(ctx, proyecto); err != nil {
+		cal, err = d.NC.MkCalendarTodos(ctx, proyecto)
+		switch {
+		case err == nil:
+			created = true
+		case errors.Is(err, nc.ErrCollision):
+			// The slug is taken (e.g. by a calendar findProject did not match):
+			// re-list and reuse it by slug or display name.
+			all, lerr := d.NC.Calendars(ctx)
+			if lerr != nil {
+				return failErr("No pude leer los proyectos", lerr)
+			}
+			var ok2 bool
+			if cal, ok2 = findCollision(all, proyecto); !ok2 {
+				return failErr("No pude crear el proyecto", err)
+			}
+		default:
 			return failErr("No pude crear el proyecto", err)
 		}
-		created = true
 	}
 
 	var parent string

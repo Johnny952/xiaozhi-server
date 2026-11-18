@@ -134,6 +134,9 @@ func (c *Client) MkCalendarTodos(ctx context.Context, name string) (Calendar, er
 	}
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
+	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusConflict {
+		return Calendar{}, fmt.Errorf("%w: %s", ErrCollision, id)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return Calendar{}, statusErr("MKCALENDAR", id, resp.StatusCode)
 	}

@@ -20,7 +20,9 @@ var (
 	ErrNotFound = errors.New("nextcloud: not found")
 	// ErrConflict means a precondition (If-Match / If-None-Match) failed with 412.
 	ErrConflict = errors.New("nextcloud: conflict (precondition failed)")
-	ErrLocked   = errors.New("nextcloud: resource locked")
+	// ErrCollision means MKCALENDAR hit an existing collection (405/409).
+	ErrCollision = errors.New("nextcloud: collection already exists")
+	ErrLocked    = errors.New("nextcloud: resource locked")
 )
 
 // Client talks to one Nextcloud instance as one user.

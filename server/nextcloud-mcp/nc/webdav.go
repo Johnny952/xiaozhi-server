@@ -159,7 +159,10 @@ func (c *Client) List(ctx context.Context, dir string) ([]Entry, error) {
 // SearchName finds files and folders whose name contains name (max 20).
 func (c *Client) SearchName(ctx context.Context, name string) ([]Entry, error) {
 	var esc bytes.Buffer
-	xml.EscapeText(&esc, []byte(name))
+	// LIKE wildcards in the user's text must match literally; backslash is the
+	// escape character Nextcloud's search uses.
+	lit := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(name)
+	xml.EscapeText(&esc, []byte(lit))
 	body := fmt.Sprintf(`<?xml version="1.0"?>
 <d:searchrequest xmlns:d="DAV:"><d:basicsearch>
 <d:select><d:prop><d:resourcetype/><d:getcontentlength/><d:getlastmodified/><d:displayname/></d:prop></d:select>
