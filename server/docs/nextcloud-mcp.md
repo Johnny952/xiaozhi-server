@@ -25,3 +25,20 @@ El fork de xiaozhi ejecuta solo la primera llamada a herramienta (`toolCall[0]`)
 |---|---|---|---|---|
 | `resumen_del_dia` | | | | |
 | `bitacora_leer` (semana) | | | | |
+
+## Milestone 0: MQTT
+
+Compuerta antes de seguir con los recordatorios: valida que el parlante hable por MQTT+UDP a través del gateway y que el servidor pueda empujar un alert.
+
+- [ ] **1. Variables y despliegue.** Agregar al `.env` (lo hace el usuario): `MQTT_USERNAME`, `MQTT_PASSWORD`, `PUSH_TOKEN` y `MQTTUDP_ENABLED=true`. Luego `docker compose up -d --build mqtt-gateway xiaozhi`.
+- [ ] **2. Conversación por UDP.** Reiniciar el parlante. En los logs del gateway aparecen la conexión MQTT y el canal UDP. Tener una conversación normal.
+- [ ] **3. Alert manual** desde dentro de la red docker:
+
+  ```
+  docker run --rm --network server_xiaozhi-net curlimages/curl -s -X POST http://mqtt-gateway:8007/push -H "Authorization: Bearer $PUSH_TOKEN" -H 'Content-Type: application/json' -d '{"payload":{"type":"alert","status":"Prueba","message":"Hola desde el server","emotion":"happy"}}'
+  ```
+
+  Esperado: `{"sent":1}` y el alert en pantalla. (El nombre real de la red sale de `docker network ls`.)
+- [ ] **4. Rollback.** `MQTTUDP_ENABLED=false`, recrear `xiaozhi`, reiniciar el parlante: debe volver a WebSocket. Si el firmware se queda pegado a MQTT por la NVS, el rollback es dejar el gateway levantado; anotar el resultado.
+
+Resultado: _(pendiente)_
