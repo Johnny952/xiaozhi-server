@@ -106,7 +106,7 @@ Todas en español, con guion bajo. "Libre" ejecuta directo; "Confirma" pasa por 
 | `bitacora_leer` | contexto?, desde?, hasta?, texto? | Junta los archivos del rango y aplica correcciones (ver lectura) | Libre |
 | `resumen_del_dia` | — | Eventos de hoy, más tareas vencidas, que vencen hoy o de prioridad alta (el filtro B del briefing de secretaria.md) | Libre |
 | `agenda` | desde?, hasta? | Eventos del rango, por defecto hoy, de todos los calendarios de eventos | Libre |
-| `evento_crear` | titulo, inicio, fin?, todo_el_dia?, lugar?, descripcion?, repetir?, forzar? | Crea un evento; sin `fin` dura 1 h y la respuesta lo dice | Libre |
+| `evento_crear` | calendario, titulo, inicio, fin?, todo_el_dia?, lugar?, descripcion?, repetir?, forzar? | Crea un evento; sin `fin` dura 1 h y la respuesta lo dice. `calendario` es obligatorio: si el usuario no lo dijo, el LLM le pregunta (decidido por el usuario). Nombre inexistente ⇒ "No encontré…" más la lista de calendarios de eventos | Libre |
 | `evento_cancelar` | evento, fecha? | Busca el evento por título (y fecha) y lo borra | **Confirma** |
 | `tareas_pendientes` | proyecto?, texto? | Tareas no completadas de un proyecto o de todos | Libre |
 | `tarea_crear` | proyecto, titulo, vence?, prioridad?, descripcion?, dentro_de?, crear_proyecto?, forzar? | Crea una tarea; `dentro_de` = título de la tarea padre (lista) | Libre |
@@ -135,6 +135,11 @@ Sobre la tabla:
   - `evento_crear`: un evento con el mismo título el mismo día bloquea. Un solapamiento de horario crea igual y lo menciona en la respuesta.
   - `forzar=true` salta el bloqueo, para cuando el usuario dijo "sí, créala igual". Es mi decisión.
 - **Prioridad:** alta=1, media=5, baja=9, por defecto 5. Se aceptan las palabras alta/media/baja o el número.
+  - Al leer, "alta" es PRIORITY 1–4 (semántica de Nextcloud Tasks). PRIORITY 0 = sin definir, **no** cuenta como alta. secretaria.md dice "0 o 1", pero 0 es indefinida en RFC 5545 y metería en el resumen toda tarea sin prioridad. Es mi decisión.
+- **Calendarios de tareas = proyectos:** cuenta todo calendario que soporte VTODO, también los mixtos como "Personal" (igual que `list_calendars` del TS, que no filtra). Es mi decisión.
+- **Formato de hora al escribir eventos:** `DTSTART;TZID=<TZ>` con VTIMEZONE, como Nextcloud web; nunca hora flotante. Al leer se aceptan flotante, UTC y TZID. Es mi decisión.
+- **Eventos recurrentes:** `agenda` y `resumen_del_dia` los expanden pidiendo `<C:expand>` en el REPORT de CalDAV (lo hace el servidor; sin librería RRULE en Go). Es mi decisión.
+- **Varias llamadas a la vez:** el fork solo ejecuta `toolCall[0]` de cada respuesta. No se arregla en esta fase. El prompt pide una herramienta por turno, y "agrega leche, pan y huevos" se hace en varias vueltas. Es mi decisión.
 - **Fechas:** ISO 8601 en hora local (`TZ`). Solo fecha ⇒ tarea con vencimiento ese día.
 
 ### Bitácora
@@ -233,8 +238,12 @@ Detalles:
 
 En el fork, `handleFunctionResult` vuelve a llamar al LLM apenas responde un tool, sin esperar al usuario. Por eso se agrega un parche chico en el despacho de tool calls MCP:
 
-- Cuando un resultado de tool empieza con `PENDIENTE:`, la conexión guarda su contador de mensajes de usuario.
-- Si llega una llamada a `mcp_confirmar` y el contador no avanzó desde ese PENDIENTE, no se reenvía al MCP. Al LLM se le responde "Rechazado: debes esperar la respuesta del usuario".
+- Cuando un resultado de tool empieza con `PENDIENTE:`, la conexión guarda el código y queda "esperando la siguiente frase".
+- Solo la **frase del usuario inmediatamente siguiente** puede habilitar la confirmación (decidido por el usuario), y solo si contiene una afirmación (sí, si, dale, confirmo, hazlo, ok, de acuerdo; normalizada sin tildes ni mayúsculas) **o** los 4 dígitos del código (en cifras o en palabras).
+  - Si los contiene: se habilita un único `mcp_confirmar` con ese código durante ese turno.
+  - Si no: lo pendiente se descarta en la guardia (cualquier `mcp_confirmar` posterior se rechaza), aunque el MCP siga teniendo el código vivo hasta que expire.
+- Si llega una llamada a `mcp_confirmar` sin habilitación, no se reenvía al MCP. Al LLM se le responde "Rechazado: el usuario no confirmó".
+- Solo cuenta como frase del usuario un texto de ASR no vacío. No cuentan la palabra de activación, los resultados vacíos o de ruido, ni las interrupciones (mi decisión). El builder engancha la guardia en los puntos donde se agregan mensajes de usuario (connection.go y connection_handlemsg.go).
 - Es genérico: aplica a cualquier tool MCP llamado `confirmar` o `confirm`.
 - Lleva tests unitarios en el fork.
 
@@ -245,6 +254,8 @@ En `server/xiaozhi/config.template.yaml` se agrega un bloque breve que reemplaza
 - Cuándo usar cada herramienta.
 - Lista de proyectos conocidos (joyeria, casa, mascotas, mesa-libre, bot-opticas, bot-ofertas, scraper-bancos, bot-secretaria, otros, tareas).
 - Tareas en Tasks y eventos con hora en el calendario.
+- Para crear un evento, si el usuario no dijo el calendario, preguntarle en cuál (no adivinar).
+- Una herramienta por turno (el fork solo ejecuta la primera llamada).
 - Preguntar el contexto de la bitácora si no está claro. No anotar en la bitácora sin que el usuario lo pida, salvo al completar una tarea, que lo hace la herramienta.
 - Para corregir algo, usar `bitacora_corregir`. Editar o borrar archivos y notas no es posible por voz: decirlo.
 - Ante PENDIENTE, preguntar y esperar. Nunca llamar `confirmar` sin un sí explícito del usuario.
