@@ -1,19 +1,17 @@
 services:
   xiaozhi:
-    build: ./xiaozhi-server-go
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: xiaozhi-server:dev
-    entrypoint: ["/config/entrypoint.sh"]
-    env_file: .env
     environment:
       TZ: America/Santiago
-    volumes:
-      - ./xiaozhi:/config:ro
+      LAN_IP: ${LAN_IP:?LAN_IP must be set}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY must be set}
     ports:
-      - "${LAN_IP}:8100:8000"
-      - "${LAN_IP}:8180:8080"
-    # Egress blackhole: the template still selects external providers
-    # (ASR/TTS/VLLLM). Privacy rule: nothing leaves the LAN except DeepSeek
-    # (via LiteLLM), so resolve their API hosts to 0.0.0.0 to make them fail.
+      # LAN-only: fail instead of silently binding 0.0.0.0 when LAN_IP is unset
+      - "${LAN_IP:?LAN_IP must be set}:8100:8000"
+      - "${LAN_IP:?LAN_IP must be set}:8180:8080"
     extra_hosts:
       - "openspeech.bytedance.com:0.0.0.0"
       - "open.bigmodel.cn:0.0.0.0"

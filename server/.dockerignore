@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+**/.git
+xiaozhi-server-go/ota_bin/*.bin
+xiaozhi-server-go/logs
+xiaozhi-server-go/tmp
+xiaozhi-server-go/config.db
+xiaozhi-server-go/.config.yaml
+docs
