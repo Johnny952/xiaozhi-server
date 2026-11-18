@@ -48,6 +48,7 @@ log:
 
 prompt: |
   Eres un asistente de voz amable que habla en español latinoamericano neutro, claro y cercano, sin modismos regionales.
+  Tu nombre es weita (pronunciado güeita).
   Responde siempre en 1 a 3 frases cortas, como en una conversación hablada.
   No uses markdown, listas, viñetas ni emojis. Escribe todo en texto plano para que se pueda leer en voz alta.
   Eres además la secretaria del usuario y manejas su Nextcloud con herramientas: mcp_agenda y mcp_resumen_del_dia para ver el calendario, mcp_evento_crear y mcp_evento_cancelar para eventos, mcp_tareas_pendientes, mcp_tarea_crear, mcp_tarea_completar, mcp_tarea_anotar, mcp_tarea_cambiar y mcp_tarea_borrar para tareas, mcp_bitacora_leer, mcp_bitacora_anotar y mcp_bitacora_corregir para la bitácora, mcp_estado_proyecto_leer y mcp_estado_proyecto_anotar para el estado de un proyecto, mcp_nota_guardar y mcp_notas_buscar para notas, y mcp_archivo_leer para leer archivos.
@@ -110,16 +111,17 @@ ASR:
     base_url: http://speaches:8000
     model: Systran/faster-whisper-small
     language: es
-    prompt: "po, cachai, wena, al tiro, fome, bacán, luca, pololo"
+    # Vocabulary hint for Whisper: domain words it should prefer when unsure.
+    prompt: "Weita, Nextcloud, bitácora, tarea, tareas, agenda, calendario, nota, proyecto, joyería, casa, mascotas, mesa libre, bot ópticas, bot ofertas, scraper bancos, bot secretaria. Po, cachai, wena, al tiro, fome, bacán, luca, pololo."
     sample_rate: 16000
     output_dir: tmp/
     # Server-side end-of-speech detection (energy VAD), needed for listen mode "auto",
     # where the device never sends "stop". Raise vad_threshold if room noise triggers it.
     vad_enabled: true
-    vad_threshold: 500       # RMS of int16 PCM
-    vad_silence_ms: 800      # trailing silence that ends an utterance
-    vad_min_speech_ms: 200   # shorter bursts are discarded as noise
-    vad_max_ms: 15000        # hard cap per utterance
+    vad_threshold: 500 # RMS of int16 PCM
+    vad_silence_ms: 800 # trailing silence that ends an utterance
+    vad_min_speech_ms: 200 # shorter bursts are discarded as noise
+    vad_max_ms: 15000 # hard cap per utterance
 
   DoubaoASR:
     # 火山 流式语音识别大模型-小时版， https://console.volcengine.com/ark/region:ark+cn-beijing/tts/speechRecognition
@@ -128,7 +130,7 @@ ASR:
     appid: "你的appid"
     access_token: 你的access_token
     output_dir: tmp/
-    end_window_size: 300  # 结束窗口大小，单位毫秒，默认400ms，最小200ms
+    end_window_size: 300 # 结束窗口大小，单位毫秒，默认400ms，最小200ms
 
   GoSherpaASR:
     type: gosherpa
@@ -149,7 +151,7 @@ ASR:
     voice: "qingchunshaonv"
     prompt: 你是由阶跃星辰提供的AI聊天助手，你擅长中文、英文及多语种对话。
 
-# TTS配置
+  # TTS配置
   IflytekASR:
     # iFlytek voice dictation WebSocket, expects 16k PCM audio.
     type: iflytek
@@ -259,7 +261,7 @@ TTS:
     output_dir: "tmp/"
     sample_rate: 16000
 
-# LLM配置
+  # LLM配置
   IflytekTTS:
     # token stores api_key, cluster stores api_secret for compatibility with existing TTS config.
     type: iflytek
@@ -371,4 +373,3 @@ VLLLM:
       allowed_formats: ["jpeg", "jpg", "png", "webp", "gif"]
       enable_deep_scan: true
       validation_timeout: 10s
-
