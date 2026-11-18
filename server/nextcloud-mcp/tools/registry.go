@@ -39,6 +39,8 @@ func All(d *Deps) []Tool {
 	out = append(out, bitacoraTools(d)...)
 	out = append(out, agendaTools(d)...)
 	out = append(out, tareaTools(d)...)
+	out = append(out, notaTools(d)...)
+	out = append(out, archivoTools(d)...)
 	return out
 }
 

@@ -361,6 +361,21 @@ type calState struct {
 	notes        map[int64]*FakeNote
 	nextNote     int64
 	noteVersions int64
+	noteMuts     []noteMut
+}
+
+type noteMut struct {
+	id      int64
+	content string
+}
+
+// MutateNoteBeforeNextPut simulates a concurrent edit of a note: just before
+// the next note PUT is evaluated (one per PUT, queued), note id gets content
+// and a new ETag, so a PUT carrying the old If-Match fails with 412.
+func (f *Fake) MutateNoteBeforeNextPut(id int64, content string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cs.noteMuts = append(f.cs.noteMuts, noteMut{id, content})
 }
 
 // AddCalendar registers a calendar with the given supported components.
@@ -704,6 +719,14 @@ func (f *Fake) notesAPI(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"`+n.ETag+`"`)
 		writeJSON(http.StatusOK, n)
 	case http.MethodPut:
+		if len(f.cs.noteMuts) > 0 {
+			m := f.cs.noteMuts[0]
+			f.cs.noteMuts = f.cs.noteMuts[1:]
+			if mn := f.cs.notes[m.id]; mn != nil {
+				mn.Content = m.content
+				f.touchNote(mn)
+			}
+		}
 		if im := strings.Trim(r.Header.Get("If-Match"), `"`); r.Header.Get("If-Match") != "" && im != n.ETag {
 			w.WriteHeader(http.StatusPreconditionFailed)
 			return
