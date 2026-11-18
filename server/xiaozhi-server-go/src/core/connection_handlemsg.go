@@ -183,7 +183,7 @@ func (h *ConnectionHandler) handleListenMessage(msgMap map[string]interface{}) e
 		if hasText && text != "" {
 			// 只有文本，使用普通LLM处理
 			h.LogInfo(fmt.Sprintf("[检测] [纯文本消息 %s] 使用LLM处理", text))
-			return h.handleChatMessage(context.Background(), text)
+			return h.handleChat(context.Background(), text, false)
 		} else {
 			// 既没有图片也没有文本
 			h.logger.Warn("detect消息既没有text也没有image参数")
@@ -277,6 +277,7 @@ func (h *ConnectionHandler) handleImageMessage(ctx context.Context, msgMap map[s
 	}
 
 	// 添加用户消息到对话历史（包含图片信息的描述）
+	h.observeUserText(text, false) // image prompt is not a spoken reply
 	userMessage := fmt.Sprintf("%s [用户发送了一张%s格式的图片]", text, imageData.Format)
 	h.dialogueManager.Put(chat.Message{
 		Role:    "user",

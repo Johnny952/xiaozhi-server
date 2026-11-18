@@ -65,6 +65,7 @@ type llmConfigGetter interface {
 
 // ConnectionHandler 连接处理器结构
 type ConnectionHandler struct {
+	confirmGuard confirmGuard // guards MCP confirmar tools; zero value is ready
 	// 确保实现 AsrEventListener 接口
 	_           providers.AsrEventListener
 	config      *configs.Config
@@ -692,6 +693,20 @@ func (h *ConnectionHandler) quickReplyWakeUpWords(text string) bool {
 
 // handleChatMessage 处理聊天消息
 func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) error {
+	return h.handleChat(ctx, text, true)
+}
+
+// observeUserText feeds the confirmation guard. spoken is false for texts that
+// are not the user's answer (wake word from "detect", default image prompt).
+func (h *ConnectionHandler) observeUserText(text string, spoken bool) {
+	if spoken && !strings.HasPrefix(text, "[SILENCE_TIMEOUT]") {
+		h.confirmGuard.OnUserUtterance(text)
+	}
+}
+
+// handleChat is handleChatMessage; spoken=false keeps the text from counting
+// as the user's reply to a pending confirmation.
+func (h *ConnectionHandler) handleChat(ctx context.Context, text string, spoken bool) error {
 	if text == "" {
 		h.logger.Warn("收到空聊天消息，忽略")
 		h.clientAbortChat()
@@ -733,6 +748,8 @@ func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) 
 	if h.quickReplyWakeUpWords(text) {
 		return nil
 	}
+
+	h.observeUserText(text, spoken)
 
 	// 添加用户消息到对话历史
 	h.dialogueManager.Put(chat.Message{
@@ -891,7 +908,17 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 			h.LogInfo(fmt.Sprintf("函数调用: %v", arguments))
 			if h.mcpManager.IsMCPTool(functionName) {
 				// 处理MCP函数调用
-				result, err := h.mcpManager.ExecuteTool(ctx, functionName, arguments)
+				var result interface{}
+				var err error
+				if !h.confirmGuard.Authorize(functionName, arguments) {
+					h.LogInfo("confirmar rechazado: el usuario no confirmó")
+					result = "Rechazado: el usuario no confirmó"
+				} else {
+					result, err = h.mcpManager.ExecuteTool(ctx, functionName, arguments)
+				}
+				if s, ok := result.(string); ok {
+					h.confirmGuard.OnToolResult(s)
+				}
 				if err != nil {
 					h.LogError(fmt.Sprintf("MCP函数调用失败: %v", err))
 					if result == nil {
