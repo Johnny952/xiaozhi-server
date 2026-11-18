@@ -41,6 +41,7 @@ func All(d *Deps) []Tool {
 	out = append(out, tareaTools(d)...)
 	out = append(out, notaTools(d)...)
 	out = append(out, archivoTools(d)...)
+	out = append(out, confirmarTools(d)...)
 	return out
 }
 
