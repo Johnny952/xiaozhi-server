@@ -38,6 +38,7 @@ func All(d *Deps) []Tool {
 	var out []Tool
 	out = append(out, bitacoraTools(d)...)
 	out = append(out, agendaTools(d)...)
+	out = append(out, tareaTools(d)...)
 	return out
 }
 
