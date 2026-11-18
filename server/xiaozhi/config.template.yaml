@@ -89,13 +89,22 @@ local_mcp_fun:
 
 # 选择使用的模块
 selected_module:
-  ASR: DoubaoASR
-  TTS: EdgeTTS
+  ASR: SpeachesASR
+  TTS: SpeachesTTS
   LLM: LiteLLM
   VLLLM: ChatGLMVLLM
 
 # ASR配置
 ASR:
+  SpeachesASR:
+    type: openai
+    base_url: http://speaches:8000
+    model: Systran/faster-whisper-small
+    language: es
+    prompt: "po, cachai, wena, al tiro, fome, bacán, luca, pololo"
+    sample_rate: 16000
+    output_dir: tmp/
+
   DoubaoASR:
     # 火山 流式语音识别大模型-小时版， https://console.volcengine.com/ark/region:ark+cn-beijing/tts/speechRecognition
     # 开通功能，有20小时免费额度
@@ -140,6 +149,15 @@ ASR:
     encoding: "raw"
 
 TTS:
+  SpeachesTTS:
+    type: openai
+    base_url: http://speaches:8000
+    model: speaches-ai/piper-es_MX-claude-high
+    voice: es_MX-claude-high
+    response_format: mp3
+    speed: 1.0
+    output_dir: tmp/
+
   # EdgeTTS 是微软的语音合成服务，免费使用，容易合成失败，并发未测试
   EdgeTTS:
     type: edge

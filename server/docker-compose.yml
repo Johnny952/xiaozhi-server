@@ -16,9 +16,83 @@ services:
       - "openspeech.bytedance.com:0.0.0.0"
       - "open.bigmodel.cn:0.0.0.0"
       - "speech.platform.bing.com:0.0.0.0"
+    depends_on:
+      speaches:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
     networks:
       - xiaozhi-net
     restart: unless-stopped
+
+  speaches:
+    build:
+      context: ./speaches
+    image: xiaozhi-speaches:dev
+    environment:
+      WHISPER__COMPUTE_TYPE: int8
+      STT_MODEL_TTL: "-1"
+      TTS_MODEL_TTL: "-1"
+      LOG_LEVEL: info
+    cpus: "4"
+    volumes:
+      - speaches-models:/home/ubuntu/.cache/huggingface/hub
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - xiaozhi-net
+    restart: unless-stopped
+
+  litellm:
+    build:
+      context: ./litellm
+    image: xiaozhi-litellm:dev
+    command: ["--port", "4000", "--config", "/app/litellm-config.yaml"]
+    environment:
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:?LITELLM_DB_PASSWORD must be set}@litellm-db:5432/litellm
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY must be set}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY must be set}
+      STORE_MODEL_IN_DB: "False"
+      LITELLM_TELEMETRY_DISABLED: "true"
+    ports:
+      - "${LAN_IP:?LAN_IP must be set}:8140:4000"
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    networks:
+      - xiaozhi-net
+    restart: unless-stopped
+
+  litellm-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_DB: litellm
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD:?LITELLM_DB_PASSWORD must be set}
+    volumes:
+      - litellm-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - xiaozhi-net
+    restart: unless-stopped
+
+volumes:
+  speaches-models:
+  litellm-db-data:
 
 networks:
   xiaozhi-net:
