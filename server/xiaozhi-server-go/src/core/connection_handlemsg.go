@@ -277,6 +277,7 @@ func (h *ConnectionHandler) handleImageMessage(ctx context.Context, msgMap map[s
 	}
 
 	// 添加用户消息到对话历史（包含图片信息的描述）
+	h.confirmGuard.OnUserUtterance(text)
 	userMessage := fmt.Sprintf("%s [用户发送了一张%s格式的图片]", text, imageData.Format)
 	h.dialogueManager.Put(chat.Message{
 		Role:    "user",

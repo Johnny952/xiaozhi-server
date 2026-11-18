@@ -65,6 +65,7 @@ type llmConfigGetter interface {
 
 // ConnectionHandler 连接处理器结构
 type ConnectionHandler struct {
+	confirmGuard confirmGuard // guards MCP confirmar tools; zero value is ready
 	// 确保实现 AsrEventListener 接口
 	_           providers.AsrEventListener
 	config      *configs.Config
@@ -734,6 +735,10 @@ func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) 
 		return nil
 	}
 
+	if !strings.HasPrefix(text, "[SILENCE_TIMEOUT]") {
+		h.confirmGuard.OnUserUtterance(text)
+	}
+
 	// 添加用户消息到对话历史
 	h.dialogueManager.Put(chat.Message{
 		Role:    "user",
@@ -891,7 +896,17 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 			h.LogInfo(fmt.Sprintf("函数调用: %v", arguments))
 			if h.mcpManager.IsMCPTool(functionName) {
 				// 处理MCP函数调用
-				result, err := h.mcpManager.ExecuteTool(ctx, functionName, arguments)
+				var result interface{}
+				var err error
+				if !h.confirmGuard.Authorize(functionName, arguments) {
+					h.LogInfo("confirmar rechazado: el usuario no confirmó")
+					result = "Rechazado: el usuario no confirmó"
+				} else {
+					result, err = h.mcpManager.ExecuteTool(ctx, functionName, arguments)
+				}
+				if s, ok := result.(string); ok {
+					h.confirmGuard.OnToolResult(s)
+				}
 				if err != nil {
 					h.LogError(fmt.Sprintf("MCP函数调用失败: %v", err))
 					if result == nil {
