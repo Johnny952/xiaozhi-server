@@ -5,6 +5,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -114,10 +115,20 @@ func missing(req mcp.CallToolRequest, keys ...string) *mcp.CallToolResult {
 	return nil
 }
 
+// toolTimeout bounds one whole tool call so a hung Nextcloud still gets an
+// answer within seconds.
+var toolTimeout = 20 * time.Second
+
 // handler adapts a simple function to server.ToolHandlerFunc.
 func handler(f func(ctx context.Context, req mcp.CallToolRequest) *mcp.CallToolResult) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return f(ctx, req), nil
+		ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+		defer cancel()
+		res := f(ctx, req)
+		if res != nil && res.IsError && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fail("Nextcloud no respondió a tiempo."), nil
+		}
+		return res, nil
 	}
 }
 

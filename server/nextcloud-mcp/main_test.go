@@ -9,17 +9,29 @@ import (
 	"nextcloud-mcp/nctest"
 )
 
-func TestRunMissingEnvExits(t *testing.T) {
+func TestRunMissingEnvServesNoTools(t *testing.T) {
+	in := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
+	}, "\n") + "\n"
 	var out, errb bytes.Buffer
-	code := run(func(string) string { return "" }, strings.NewReader(""), &out, &errb)
-	if code == 0 {
-		t.Fatal("want nonzero exit")
+	code := run(func(string) string { return "" }, strings.NewReader(in), &out, &errb)
+	if code != 0 {
+		t.Fatalf("code %d stderr %q", code, errb.String())
 	}
 	if !strings.Contains(errb.String(), "NEXTCLOUD_URL") {
 		t.Fatalf("stderr = %q", errb.String())
 	}
-	if out.Len() != 0 {
-		t.Fatalf("stdout not empty: %q", out.String())
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want initialize + tools/list answers, got %q", out.String())
+	}
+	if !strings.Contains(lines[0], `"serverInfo"`) {
+		t.Fatalf("initialize answer: %q", lines[0])
+	}
+	if strings.Contains(lines[1], `"name"`) {
+		t.Fatalf("tools listed: %q", lines[1])
 	}
 }
 

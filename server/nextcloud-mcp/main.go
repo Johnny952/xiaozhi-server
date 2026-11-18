@@ -32,9 +32,13 @@ func run(env func(string) string, in io.Reader, out, errw io.Writer) int {
 			missing = append(missing, k)
 		}
 	}
+	s := server.NewMCPServer("nextcloud", "1.0.0", server.WithToolCapabilities(false))
 	if len(missing) > 0 {
-		fmt.Fprintf(errw, "nextcloud-mcp: faltan variables de entorno: %s\n", strings.Join(missing, ", "))
-		return 1
+		// Keep answering the MCP handshake with zero tools instead of exiting:
+		// a dead child would stall the client's initialize for its full
+		// timeout on every device connection.
+		fmt.Fprintf(errw, "nextcloud-mcp: Nextcloud no configurado (faltan: %s); sin herramientas\n", strings.Join(missing, ", "))
+		return serve(s, in, out, errw)
 	}
 
 	loc, err := time.LoadLocation(env("TZ"))
@@ -52,11 +56,14 @@ func run(env func(string) string, in io.Reader, out, errw io.Writer) int {
 		Now:     time.Now,
 		Loc:     loc,
 	}
-	s := server.NewMCPServer("nextcloud", "1.0.0", server.WithToolCapabilities(false))
 	for _, t := range tools.All(d) {
 		s.AddTool(t.Def, t.Handle)
 	}
 
+	return serve(s, in, out, errw)
+}
+
+func serve(s *server.MCPServer, in io.Reader, out, errw io.Writer) int {
 	ss := server.NewStdioServer(s)
 	ss.SetErrorLogger(log.New(errw, "nextcloud-mcp ", log.LstdFlags))
 	if err := ss.Listen(context.Background(), in, out); err != nil && err != io.EOF {

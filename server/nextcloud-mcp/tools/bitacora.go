@@ -341,36 +341,25 @@ func (d *Deps) fetchLogDays(ctx context.Context, slugs []string, dates []time.Ti
 		}
 	}
 	var (
-		mu       sync.Mutex
-		wg       sync.WaitGroup
-		out      []logDay
-		firstErr error
-		sem      = make(chan struct{}, maxParallel)
+		mu  sync.Mutex
+		out []logDay
 	)
-	for _, j := range jobs {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(j job) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			body, _, err := d.NC.Get(ctx, bitacora.Path(j.slug, j.date))
-			mu.Lock()
-			defer mu.Unlock()
-			if errors.Is(err, nc.ErrNotFound) {
-				return
-			}
-			if err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				return
-			}
-			out = append(out, logDay{date: j.date, slug: j.slug, day: bitacora.Parse(string(body))})
-		}(j)
-	}
-	wg.Wait()
-	if firstErr != nil {
-		return nil, firstErr
+	err := parallel(ctx, len(jobs), func(ctx context.Context, i int) error {
+		j := jobs[i]
+		body, _, err := d.NC.Get(ctx, bitacora.Path(j.slug, j.date))
+		if errors.Is(err, nc.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		out = append(out, logDay{date: j.date, slug: j.slug, day: bitacora.Parse(string(body))})
+		mu.Unlock()
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	sort.Slice(out, func(i, k int) bool {
 		if !out[i].date.Equal(out[k].date) {

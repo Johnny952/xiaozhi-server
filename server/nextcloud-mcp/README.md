@@ -11,7 +11,7 @@ Servidor MCP en Go (stdio) que expone agenda, tareas, bitácora y notas de Nextc
 | `NEXTCLOUD_PASSWORD` | App password de Nextcloud (obligatoria) |
 | `TZ` | Zona horaria, p. ej. `America/Santiago` (obligatoria; se embebe `time/tzdata`) |
 
-Si falta alguna, el binario sale con código distinto de 0 y un mensaje en stderr; el servidor de voz sigue arrancando sin estas tools.
+Si falta alguna, el binario avisa en stderr y sigue respondiendo el protocolo MCP **sin ninguna tool** (no sale, para no retrasar la conexión de los dispositivos); el servidor de voz sigue funcionando sin estas tools.
 
 ## Tests
 

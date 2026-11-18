@@ -78,29 +78,39 @@ func agendaTools(d *Deps) []Tool {
 	}
 }
 
-// parallel runs f(0..n-1) with at most maxParallel in flight and returns the
-// first error.
-func parallel(n int, f func(i int) error) error {
+// parallel runs f(0..n-1) with at most maxParallel in flight. On the first
+// error it cancels the context passed to f and starts no further jobs.
+func parallel(ctx context.Context, n int, f func(ctx context.Context, i int) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	sem := make(chan struct{}, maxParallel)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
 	for i := 0; i < n; i++ {
-		wg.Add(1)
 		sem <- struct{}{}
+		if ctx.Err() != nil {
+			<-sem
+			break
+		}
+		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if err := f(i); err != nil {
+			if err := f(ctx, i); err != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = err
+					cancel()
 				}
 				mu.Unlock()
 			}
 		}(i)
 	}
 	wg.Wait()
+	if firstErr == nil {
+		firstErr = ctx.Err()
+	}
 	return firstErr
 }
 
@@ -148,7 +158,7 @@ func findCalendar(cals []nc.Calendar, name string) (nc.Calendar, bool) {
 func (d *Deps) fetchEvents(ctx context.Context, cals []nc.Calendar, from, to time.Time, expand bool) ([]calEvent, error) {
 	var mu sync.Mutex
 	var out []calEvent
-	err := parallel(len(cals), func(i int) error {
+	err := parallel(ctx, len(cals), func(ctx context.Context, i int) error {
 		objs, err := d.NC.Query(ctx, cals[i].ID, "VEVENT", &from, &to, expand)
 		if err != nil {
 			return err
@@ -194,7 +204,7 @@ func sortEvents(evs []calEvent) {
 func (d *Deps) fetchTodos(ctx context.Context, cals []nc.Calendar) ([]calTodo, error) {
 	var mu sync.Mutex
 	var out []calTodo
-	err := parallel(len(cals), func(i int) error {
+	err := parallel(ctx, len(cals), func(ctx context.Context, i int) error {
 		objs, err := d.NC.Query(ctx, cals[i].ID, "VTODO", nil, nil, false)
 		if err != nil {
 			return err

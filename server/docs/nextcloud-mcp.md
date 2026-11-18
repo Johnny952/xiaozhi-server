@@ -10,12 +10,14 @@ El fork de xiaozhi ejecuta solo la primera llamada a herramienta (`toolCall[0]`)
 
 ## Checklist E2E por voz (lo ejecuta el usuario)
 
+- [ ] **Paso 1, antes de todo lo demás:** verificar que DeepSeek, vía LiteLLM, hace tool calling correcto (Task 1). Sin esto nada de lo siguiente funciona.
+- [ ] Conectar un dispositivo con `NEXTCLOUD_*` vacías: debe recibir `hello` de inmediato (el MCP responde el handshake sin tools).
+- [ ] Buscar un archivo con `_` en el nombre (LIKE).
 - [ ] Anotar en la bitácora, corregir una entrada, leer el día y leer la semana.
 - [ ] Crear una tarea duplicada (debe avisar) y luego completarla; verificar que queda en la bitácora.
 - [ ] Borrar una tarea con confirmación; verificar que se rechaza la auto-confirmación.
 - [ ] "¿Qué tengo hoy?"
 - [ ] Guardar en una nota existente.
-- [ ] Verificar que DeepSeek, vía LiteLLM, hace tool calling correcto (Task 1).
 
 ## Latencia medida
 

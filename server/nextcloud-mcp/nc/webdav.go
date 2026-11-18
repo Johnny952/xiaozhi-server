@@ -42,6 +42,24 @@ func (c *Client) Get(ctx context.Context, p string) ([]byte, string, error) {
 	return b, cleanETag(resp.Header.Get("ETag")), nil
 }
 
+// GetPrefix downloads at most max bytes of a file (for read-aloud previews;
+// never use it for read-modify-write).
+func (c *Client) GetPrefix(ctx context.Context, p string, max int64) ([]byte, string, error) {
+	resp, err := c.do(ctx, http.MethodGet, c.filesRoot()+escapePath(p), nil, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", statusErr("GET", p, resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, max))
+	if err != nil {
+		return nil, "", fmt.Errorf("nextcloud: read body of %s: %w", p, err)
+	}
+	return b, cleanETag(resp.Header.Get("ETag")), nil
+}
+
 // Put writes a file conditionally: etag=="" means "only if it does not exist",
 // otherwise "only if it still has this ETag". A 423 (locked) is retried once
 // after LockWait. A failed precondition returns ErrConflict without retry.

@@ -301,7 +301,7 @@ En `server/xiaozhi/config.template.yaml` se agrega un bloque breve que reemplaza
   ```
 - Credenciales: el subproceso las hereda del entorno del contenedor. Creo que mcp-go v0.29 hace `cmd.Env = append(os.Environ(), env...)`; **el builder debe verificarlo**.
   - Si no las hereda, `entrypoint.sh` renderiza el JSON con `envsubst` y `chmod 600`.
-- Si faltan `NEXTCLOUD_*`, el MCP sale con un error en stderr y xiaozhi arranca sin esas tools, con la voz intacta. El entrypoint no aborta.
+- Si faltan `NEXTCLOUD_*`, el MCP avisa en stderr y sigue respondiendo el handshake MCP con cero tools (no sale: un hijo muerto haría esperar a xiaozhi ~30 s en cada conexión), con la voz intacta. El entrypoint no aborta.
 - `docker-compose.yml` pasa `NEXTCLOUD_URL`, `NEXTCLOUD_USER`, `NEXTCLOUD_PASSWORD` y `TZ` al servicio xiaozhi.
 - Nunca se loguea a stdout, que es el canal MCP. Logs a stderr, sin credenciales.
 

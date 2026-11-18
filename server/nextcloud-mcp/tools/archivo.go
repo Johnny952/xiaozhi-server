@@ -23,6 +23,10 @@ var textExts = map[string]bool{
 	".vcf": true, ".xml": true, ".html": true,
 }
 
+// maxReadBytes bounds what archivo_leer downloads; the answer is clipped to
+// clipMax characters anyway.
+const maxReadBytes = 64 << 10
+
 func archivoTools(d *Deps) []Tool {
 	return []Tool{{
 		Def: mcp.NewTool("archivo_leer",
@@ -79,7 +83,7 @@ func (d *Deps) archivoLeer(ctx context.Context, req mcp.CallToolRequest) *mcp.Ca
 	if ext != "" && !textExts[ext] {
 		return fail("No puedo leer en voz alta un archivo " + strings.ToUpper(strings.TrimPrefix(ext, ".")) + ".")
 	}
-	b, _, err := d.NC.Get(ctx, p)
+	b, _, err := d.NC.GetPrefix(ctx, p, maxReadBytes)
 	if errors.Is(err, nc.ErrNotFound) {
 		return fail("No existe el archivo " + p + ".")
 	}
