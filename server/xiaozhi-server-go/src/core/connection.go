@@ -325,6 +325,12 @@ func (h *ConnectionHandler) checkTTSProvider(agent *models.Agent, config *config
 							Token:           cfg.Token,
 							Cluster:         cfg.Cluster,
 							SupportedVoices: cfg.SupportedVoices,
+							BaseURL:         cfg.BaseURL,
+							APIKey:          cfg.APIKey,
+							Model:           cfg.Model,
+							Speed:           cfg.Speed,
+							ResponseFormat:  cfg.ResponseFormat,
+							Timeout:         cfg.Timeout,
 						}
 						newVoice = newVoice2
 						newtts, err := tts.Create(cfg.Type, ttsCfg, false)

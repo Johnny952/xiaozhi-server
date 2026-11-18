@@ -201,7 +201,7 @@ func (s *DefaultUserService) testTTSProvider(ctx context.Context, name, subType 
 	if outputDir == "" {
 		outputDir = os.TempDir()
 	}
-	provider, err := tts.Create(subType, &tts.Config{Name: name, Type: subType, OutputDir: outputDir, Voice: providerConfig.Voice, Format: providerConfig.Format, AppID: providerConfig.AppID, Token: providerConfig.Token, Cluster: providerConfig.Cluster, SupportedVoices: providerConfig.SupportedVoices}, false)
+	provider, err := tts.Create(subType, &tts.Config{Name: name, Type: subType, OutputDir: outputDir, Voice: providerConfig.Voice, Format: providerConfig.Format, AppID: providerConfig.AppID, Token: providerConfig.Token, Cluster: providerConfig.Cluster, SupportedVoices: providerConfig.SupportedVoices, BaseURL: providerConfig.BaseURL, APIKey: providerConfig.APIKey, Model: providerConfig.Model, Speed: providerConfig.Speed, ResponseFormat: providerConfig.ResponseFormat, Timeout: providerConfig.Timeout}, false)
 	if err != nil {
 		return liveProviderTestResult{}, fmt.Errorf("TTS Provider 初始化失败：%w", err)
 	}

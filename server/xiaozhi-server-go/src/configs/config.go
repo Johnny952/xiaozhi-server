@@ -126,6 +126,14 @@ type TTSConfig struct {
 	Token           string      `yaml:"token"            json:"token"`            // API密钥
 	Cluster         string      `yaml:"cluster"          json:"cluster"`          // 集群信息
 	SupportedVoices []VoiceInfo `yaml:"supported_voices" json:"supported_voices"` // 支持的语音列表
+
+	// OpenAI-compatible TTS (e.g. Speaches/Piper)
+	BaseURL        string  `yaml:"base_url"         json:"base_url"`
+	APIKey         string  `yaml:"api_key"          json:"api_key"`
+	Model          string  `yaml:"model"            json:"model"`
+	Speed          float64 `yaml:"speed"            json:"speed"`
+	ResponseFormat string  `yaml:"response_format"  json:"response_format"`
+	Timeout        int     `yaml:"timeout"          json:"timeout"`
 }
 
 // LLMConfig LLM配置结构

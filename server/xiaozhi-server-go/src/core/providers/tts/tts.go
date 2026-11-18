@@ -21,6 +21,13 @@ type Config struct {
 	Token           string              `yaml:"token"`
 	Cluster         string              `yaml:"cluster"`
 	SupportedVoices []configs.VoiceInfo `yaml:"supported_voices"` // 支持的语音列表
+
+	BaseURL        string  `yaml:"base_url"`
+	APIKey         string  `yaml:"api_key"`
+	Model          string  `yaml:"model"`
+	Speed          float64 `yaml:"speed"`
+	ResponseFormat string  `yaml:"response_format"`
+	Timeout        int     `yaml:"timeout"`
 }
 
 // Provider TTS提供者接口

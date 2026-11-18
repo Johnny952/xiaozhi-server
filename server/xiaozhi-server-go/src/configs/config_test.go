@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 )
 
@@ -66,5 +67,16 @@ func TestLoadConfigCreatesPrivateConfigFromTemplate(t *testing.T) {
 	}
 	if strings.Contains(db.serverConfig, "port: 8000") {
 		t.Fatalf("initial config must not be saved to config DB before it is completed: %q", db.serverConfig)
+	}
+}
+
+func TestTTSConfigYAMLFields(t *testing.T) {
+	var c TTSConfig
+	y := "type: openai\nbase_url: http://speaches:8000/v1\nmodel: m\nspeed: 1.25\nvoice: v\napi_key: k\nresponse_format: mp3\ntimeout: 20\n"
+	if err := yaml.Unmarshal([]byte(y), &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.BaseURL != "http://speaches:8000/v1" || c.Model != "m" || c.Speed != 1.25 || c.Voice != "v" || c.APIKey != "k" || c.ResponseFormat != "mp3" || c.Timeout != 20 {
+		t.Fatalf("bad parse: %+v", c)
 	}
 }

@@ -118,6 +118,12 @@ func NewTTSFactory(ttsType string, config *configs.Config, logger *utils.Logger)
 				Token:           ttsCfg.Token,
 				Cluster:         ttsCfg.Cluster,
 				SupportedVoices: ttsCfg.SupportedVoices,
+				BaseURL:         ttsCfg.BaseURL,
+				APIKey:          ttsCfg.APIKey,
+				Model:           ttsCfg.Model,
+				Speed:           ttsCfg.Speed,
+				ResponseFormat:  ttsCfg.ResponseFormat,
+				Timeout:         ttsCfg.Timeout,
 			},
 			logger: logger,
 			params: map[string]interface{}{

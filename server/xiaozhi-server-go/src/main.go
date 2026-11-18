@@ -55,6 +55,7 @@ import (
 	_ "xiaozhi-server-go/src/core/providers/tts/edge"
 	_ "xiaozhi-server-go/src/core/providers/tts/gosherpa"
 	_ "xiaozhi-server-go/src/core/providers/tts/iflytek"
+	_ "xiaozhi-server-go/src/core/providers/tts/openai"
 	_ "xiaozhi-server-go/src/core/providers/vlllm/ollama"
 	_ "xiaozhi-server-go/src/core/providers/vlllm/openai"
 
