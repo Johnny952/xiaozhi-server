@@ -221,6 +221,11 @@ func (p *Provider) Reset() error {
 
 func (p *Provider) Initialize() error { return nil }
 
+// CloseConnection is a no-op: this provider holds no long-lived connection.
+// Required by providers.ASRProvider; without it the manager's type assertion
+// panics on every device connect.
+func (p *Provider) CloseConnection() error { return nil }
+
 func (p *Provider) Cleanup() error {
 	p.takeBuffer()
 	return nil
