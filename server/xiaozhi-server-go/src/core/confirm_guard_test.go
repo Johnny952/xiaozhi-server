@@ -116,3 +116,25 @@ func TestConfirmGuardNewPendingClearsEnable(t *testing.T) {
 		t.Fatal("new pending must clear enable")
 	}
 }
+
+// A wake word delivered as a "detect" text (or an image prompt) is not the
+// user's answer: it must not consume the pending confirmation (spec:246).
+func TestWakeWordDoesNotConsumePending(t *testing.T) {
+	h := &ConnectionHandler{}
+	h.confirmGuard.OnToolResult(pend)
+	h.observeUserText("你好小智", false)
+	h.observeUserText("sí", true)
+	if !h.confirmGuard.Authorize("mcp_confirmar", args("4821")) {
+		t.Fatal("confirmation after wake word must still work")
+	}
+}
+
+func TestSpokenTextStillConsumesPending(t *testing.T) {
+	h := &ConnectionHandler{}
+	h.confirmGuard.OnToolResult(pend)
+	h.observeUserText("cuéntame un chiste", true)
+	h.observeUserText("sí", true)
+	if h.confirmGuard.Authorize("mcp_confirmar", args("4821")) {
+		t.Fatal("pending must be consumed by the first real utterance")
+	}
+}

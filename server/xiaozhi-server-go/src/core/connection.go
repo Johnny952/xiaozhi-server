@@ -693,6 +693,20 @@ func (h *ConnectionHandler) quickReplyWakeUpWords(text string) bool {
 
 // handleChatMessage 处理聊天消息
 func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) error {
+	return h.handleChat(ctx, text, true)
+}
+
+// observeUserText feeds the confirmation guard. spoken is false for texts that
+// are not the user's answer (wake word from "detect", default image prompt).
+func (h *ConnectionHandler) observeUserText(text string, spoken bool) {
+	if spoken && !strings.HasPrefix(text, "[SILENCE_TIMEOUT]") {
+		h.confirmGuard.OnUserUtterance(text)
+	}
+}
+
+// handleChat is handleChatMessage; spoken=false keeps the text from counting
+// as the user's reply to a pending confirmation.
+func (h *ConnectionHandler) handleChat(ctx context.Context, text string, spoken bool) error {
 	if text == "" {
 		h.logger.Warn("收到空聊天消息，忽略")
 		h.clientAbortChat()
@@ -735,9 +749,7 @@ func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) 
 		return nil
 	}
 
-	if !strings.HasPrefix(text, "[SILENCE_TIMEOUT]") {
-		h.confirmGuard.OnUserUtterance(text)
-	}
+	h.observeUserText(text, spoken)
 
 	// 添加用户消息到对话历史
 	h.dialogueManager.Put(chat.Message{
