@@ -69,7 +69,6 @@ func TestAnotarSurvivesConcurrentWrite(t *testing.T) {
 	mustContain(t, got, "## 09:00 — Otro", "## 10:00 — Mío", "## 07:00 — Café")
 }
 
-
 func TestCorregirAppendsToOriginalDay(t *testing.T) {
 	d, f := newDeps(t)
 	p := "/Bitacora/casa/2026/2026-11-16.md"

@@ -37,6 +37,7 @@ type Tool struct {
 func All(d *Deps) []Tool {
 	var out []Tool
 	out = append(out, bitacoraTools(d)...)
+	out = append(out, agendaTools(d)...)
 	return out
 }
 
