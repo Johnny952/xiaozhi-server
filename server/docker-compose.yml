@@ -11,6 +11,9 @@ services:
       NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
       NEXTCLOUD_USER: ${NEXTCLOUD_USER:-}
       NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
+      MQTTUDP_ENABLED: ${MQTTUDP_ENABLED:-false}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
     ports:
       # LAN-only: fail instead of silently binding 0.0.0.0 when LAN_IP is unset
       - "${LAN_IP:?LAN_IP must be set}:8100:8000"
@@ -24,6 +27,24 @@ services:
         condition: service_healthy
       litellm:
         condition: service_healthy
+    networks:
+      - xiaozhi-net
+    restart: unless-stopped
+
+  mqtt-gateway:
+    build: ./mqtt-gateway
+    image: mqtt-gateway:dev
+    environment:
+      PUBLIC_IP: ${LAN_IP:?LAN_IP must be set}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      PUSH_TOKEN: ${PUSH_TOKEN:-}
+    ports:
+      # LAN-only. The push port (8007) is internal and is NOT published.
+      - "${LAN_IP:?LAN_IP must be set}:1883:1883/tcp"
+      - "${LAN_IP:?LAN_IP must be set}:8884:8884/udp"
+    depends_on:
+      - xiaozhi
     networks:
       - xiaozhi-net
     restart: unless-stopped
