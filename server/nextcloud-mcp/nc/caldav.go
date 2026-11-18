@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"nextcloud-mcp/text"
 )
 
 // Calendar is a CalDAV calendar collection of the user.
@@ -116,7 +118,7 @@ func lastSegment(href string) string {
 
 // MkCalendarTodos creates a calendar that only accepts VTODO.
 func (c *Client) MkCalendarTodos(ctx context.Context, name string) (Calendar, error) {
-	id := slug(name)
+	id := text.Slug(name)
 	if id == "" {
 		return Calendar{}, fmt.Errorf("nextcloud: invalid calendar name")
 	}
@@ -255,31 +257,4 @@ func (c *Client) DeleteObject(ctx context.Context, href, etag string) error {
 		return statusErr("DELETE", href, resp.StatusCode)
 	}
 	return nil
-}
-
-var accentFold = strings.NewReplacer(
-	"á", "a", "à", "a", "ä", "a", "â", "a", "ã", "a",
-	"é", "e", "è", "e", "ë", "e", "ê", "e",
-	"í", "i", "ì", "i", "ï", "i", "î", "i",
-	"ó", "o", "ò", "o", "ö", "o", "ô", "o", "õ", "o",
-	"ú", "u", "ù", "u", "ü", "u", "û", "u",
-	"ñ", "n", "ç", "c",
-)
-
-// slug is a local stand-in until Task 5 adds text.Slug: lowercase, accents
-// folded, runs of non-alphanumerics collapsed to a single "-".
-func slug(s string) string {
-	s = accentFold.Replace(strings.ToLower(s))
-	var b strings.Builder
-	dash := false
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-			dash = false
-		} else if !dash && b.Len() > 0 {
-			b.WriteByte('-')
-			dash = true
-		}
-	}
-	return strings.TrimRight(b.String(), "-")
 }
