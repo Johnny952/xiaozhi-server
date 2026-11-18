@@ -96,12 +96,12 @@ type WebSocketInfo struct {
 }
 
 type MQTTInfo struct {
-	Endpoint       string `json:"endpoint"        example:"mqtt://broker:1883"`
-	ClientID       string `json:"client_id"       example:"CGID_test@@@mac@@@client"`
-	Username       string `json:"username"        example:"base64string"`
-	Password       string `json:"password"        example:"randomPwd"`
-	PublishTopic   string `json:"publish_topic"   example:"device-server"`
-	SubscribeTopic string `json:"subscribe_topic" example:"null"`
+	Endpoint       string  `json:"endpoint"        example:"mqtt://broker:1883"`
+	ClientID       string  `json:"client_id"       example:"CGID_test@@@mac@@@client"`
+	Username       string  `json:"username"        example:"base64string"`
+	Password       string  `json:"password"        example:"randomPwd"`
+	PublishTopic   string  `json:"publish_topic"   example:"device-server"`
+	SubscribeTopic *string `json:"subscribe_topic" example:"null"`
 }
 
 type Activation struct {

@@ -41,6 +41,10 @@ type Config struct {
 				IP   string `yaml:"ip" json:"ip"`
 				Port int    `yaml:"port" json:"port"`
 				QoS  int    `yaml:"qos" json:"qos"`
+				// Username/Password: credenciales del broker, entregadas al dispositivo por OTA.
+				// Password nunca se serializa a JSON (la webapi marshal-ea este struct).
+				Username string `yaml:"username" json:"username"`
+				Password string `yaml:"password" json:"-"`
 			} `yaml:"mqtt" json:"mqtt"`
 			UDP struct {
 				IP                string `yaml:"ip" json:"ip"`
@@ -301,6 +305,19 @@ func LoadProvidersFromDB(dbi ConfigDBInterface, cfg *Config) {
 }
 
 func CheckAndModifyConfig(cfg *Config) *Config {
+	// Overrides por env para MQTT (vacío = respetar el yaml). Nunca se loguean las credenciales.
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MQTTUDP_ENABLED"))) {
+	case "true":
+		cfg.Transport.MQTTUDP.Enabled = true
+	case "false":
+		cfg.Transport.MQTTUDP.Enabled = false
+	}
+	if v := os.Getenv("MQTT_USERNAME"); v != "" {
+		cfg.Transport.MQTTUDP.MQTT.Username = v
+	}
+	if v := os.Getenv("MQTT_PASSWORD"); v != "" {
+		cfg.Transport.MQTTUDP.MQTT.Password = v
+	}
 	// 检查Cfg.LocalMCPFun全部小写并去除空格
 	if cfg.LocalMCPFun == nil {
 		cfg.LocalMCPFun = []LocalMCPFun{}

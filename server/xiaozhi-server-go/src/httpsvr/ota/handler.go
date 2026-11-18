@@ -35,6 +35,7 @@ type OtaFirmwareResponse struct {
 	Websocket struct {
 		URL string `json:"url" example:"wss://example.com/ota"`
 	} `json:"websocket"`
+	MQTT *MQTTInfo `json:"mqtt,omitempty"`
 }
 
 // ErrorResponse 定义错误返回结构
@@ -266,6 +267,15 @@ func (s *DefaultOTAService) handlePostOTA(c *gin.Context) {
 	resp.Firmware.Version = version
 	resp.Firmware.URL = firmwareURL
 	resp.Websocket.URL = updateURL
+	if m := cfg.Transport.MQTTUDP; m.Enabled {
+		resp.MQTT = &MQTTInfo{
+			Endpoint:     fmt.Sprintf("%s:%d", m.MQTT.IP, m.MQTT.Port),
+			ClientID:     client_id,
+			Username:     m.MQTT.Username,
+			Password:     m.MQTT.Password,
+			PublishTopic: "device-server",
+		}
+	}
 	if resp.Websocket.URL == "" {
 		utils.DefaultLogger.Warn("===========================================================")
 		utils.DefaultLogger.Warn("=====  WebSocket URL 未配置，OTA 服务可能无法正常工作 =====")
