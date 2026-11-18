@@ -8,6 +8,9 @@ services:
       TZ: America/Santiago
       LAN_IP: ${LAN_IP:?LAN_IP must be set}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY must be set}
+      NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
+      NEXTCLOUD_USER: ${NEXTCLOUD_USER:-}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
     ports:
       # LAN-only: fail instead of silently binding 0.0.0.0 when LAN_IP is unset
       - "${LAN_IP:?LAN_IP must be set}:8100:8000"
