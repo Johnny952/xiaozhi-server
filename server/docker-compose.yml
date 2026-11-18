@@ -34,15 +34,23 @@ services:
       STT_MODEL_TTL: "-1"
       TTS_MODEL_TTL: "-1"
       LOG_LEVEL: info
+      HF_HUB_DISABLE_TELEMETRY: "1"
     cpus: "4"
     volumes:
       - speaches-models:/home/ubuntu/.cache/huggingface/hub
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      # Healthy only once BOTH preloaded models are installed (listed by /v1/models).
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS http://localhost:8000/v1/models > /tmp/models.json
+          && grep -q 'Systran/faster-whisper-small' /tmp/models.json
+          && grep -q 'speaches-ai/piper-es_MX-claude-high' /tmp/models.json
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 60s
+      # First boot downloads ~500 MB of models; failures here don't count.
+      start_period: 600s
     networks:
       - xiaozhi-net
     restart: unless-stopped
