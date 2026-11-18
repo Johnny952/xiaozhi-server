@@ -214,3 +214,110 @@ func TestNewProviderRequiresBaseURL(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+// tone returns ms of 16-bit LE PCM at 16 kHz with constant amplitude amp.
+func tone(ms int, amp int16) []byte {
+	n := ms * 16
+	b := make([]byte, 2*n)
+	for i := 0; i < n; i++ {
+		v := amp
+		if i%2 == 1 {
+			v = -amp
+		}
+		b[2*i] = byte(uint16(v))
+		b[2*i+1] = byte(uint16(v) >> 8)
+	}
+	return b
+}
+
+func feed(p *Provider, ms int, amp int16) {
+	for i := 0; i < ms/60; i++ {
+		p.AddAudio(tone(60, amp))
+	}
+}
+
+func TestVADFinalizesAfterTrailingSilence(t *testing.T) {
+	var gotBytes int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseMultipartForm(1 << 20)
+		f, _, _ := r.FormFile("file")
+		if f != nil {
+			n, _ := io.Copy(io.Discard, f)
+			atomic.StoreInt64(&gotBytes, n)
+		}
+		w.Write([]byte(`{"text":"hola"}`))
+	}))
+	defer srv.Close()
+	p, l := newTestProvider(t, map[string]interface{}{"base_url": srv.URL})
+	feed(p, 1200, 0)   // leading silence: trimmed to the preroll
+	feed(p, 600, 3000) // speech
+	feed(p, 900, 0)    // trailing silence
+	r := l.wait(t, 3*time.Second)
+	if r.text != "hola" || !r.final {
+		t.Fatalf("got %+v", r)
+	}
+	// WAV = 44 header + preroll(300ms) + speech(600ms) + silence up to 840ms
+	if n := atomic.LoadInt64(&gotBytes); n > 44+2*16*(300+600+900) || n < 44+2*16*(600+800) {
+		t.Fatalf("unexpected wav size %d", n)
+	}
+	// Chunks after the endpoint start a fresh utterance; only preroll may remain.
+	if p.bufLen() > 2*16*300 {
+		t.Fatalf("buffer not taken: %d", p.bufLen())
+	}
+}
+
+func TestVADIgnoresShortNoise(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { atomic.AddInt32(&hits, 1) }))
+	defer srv.Close()
+	p, l := newTestProvider(t, map[string]interface{}{"base_url": srv.URL})
+	feed(p, 120, 3000) // click shorter than min speech
+	feed(p, 1200, 0)
+	select {
+	case r := <-l.ch:
+		t.Fatalf("unexpected result %+v", r)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if atomic.LoadInt32(&hits) != 0 {
+		t.Fatal("unexpected request")
+	}
+}
+
+func TestVADSilenceOnlyNeverFinalizes(t *testing.T) {
+	p, l := newTestProvider(t, map[string]interface{}{"base_url": "http://127.0.0.1:1"})
+	feed(p, 3000, 100)
+	select {
+	case r := <-l.ch:
+		t.Fatalf("unexpected result %+v", r)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if p.bufLen() > 2*16*300 {
+		t.Fatalf("preroll not trimmed: %d", p.bufLen())
+	}
+}
+
+func TestVADMaxUtteranceForcesFinalize(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"text":"largo"}`))
+	}))
+	defer srv.Close()
+	p, l := newTestProvider(t, map[string]interface{}{"base_url": srv.URL, "vad_max_ms": 1000})
+	feed(p, 1500, 3000)
+	if r := l.wait(t, 3*time.Second); r.text != "largo" {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestVADDisabledKeepsBuffering(t *testing.T) {
+	p, l := newTestProvider(t, map[string]interface{}{"base_url": "http://127.0.0.1:1", "vad_enabled": false})
+	feed(p, 600, 3000)
+	feed(p, 1200, 0)
+	select {
+	case r := <-l.ch:
+		t.Fatalf("unexpected result %+v", r)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if p.bufLen() != 2*16*(600+1200) {
+		t.Fatalf("buffer %d", p.bufLen())
+	}
+}
