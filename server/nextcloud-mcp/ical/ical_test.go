@@ -170,3 +170,44 @@ func TestParseExpandedRecurrence(t *testing.T) {
 		t.Fatalf("got %+v", evs)
 	}
 }
+
+const alarm = "BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Default Mozilla Description\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n"
+
+func TestValarmContentIgnored(t *testing.T) {
+	loc := santiago(t)
+	ev := "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nSUMMARY:s\r\nDTSTART:20261121T150000Z\r\n" + alarm + "END:VEVENT\r\nEND:VCALENDAR\r\n"
+	if d := ParseVEvents(ev, loc)[0].Description; d != "" {
+		t.Errorf("event description leaked alarm: %q", d)
+	}
+	if _, _, ok := Field(ev, "DESCRIPTION"); ok {
+		t.Error("Field returned alarm DESCRIPTION")
+	}
+	if _, _, ok := Field(ev, "TRIGGER"); ok {
+		t.Error("Field returned alarm TRIGGER")
+	}
+	td := "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:t\r\nSUMMARY:s\r\n" + alarm + "END:VTODO\r\nEND:VCALENDAR\r\n"
+	if d := ParseVTodo(td, loc).Description; d != "" {
+		t.Errorf("todo description leaked alarm: %q", d)
+	}
+	// props after the alarm are still found
+	td2 := strings.Replace(td, "END:VTODO", "DESCRIPTION:propia\r\nEND:VTODO", 1)
+	if d := ParseVTodo(td2, loc).Description; d != "propia" {
+		t.Errorf("description = %q", d)
+	}
+}
+
+func TestSetVTodoFieldLeavesValarmAlone(t *testing.T) {
+	td := "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:t\r\nSUMMARY:s\r\n" + alarm + "END:VTODO\r\nEND:VCALENDAR\r\n"
+	out := SetVTodoField(td, "DESCRIPTION", "nueva")
+	if !strings.Contains(out, "DESCRIPTION:Default Mozilla Description") {
+		t.Fatalf("alarm description rewritten: %q", out)
+	}
+	if !strings.Contains(out, "END:VALARM\r\nDESCRIPTION:nueva\r\nEND:VTODO") {
+		t.Fatalf("todo description not appended at VTODO level: %q", out)
+	}
+	// replacing again replaces the VTODO one, still not the alarm's
+	out = SetVTodoField(out, "DESCRIPTION", "otra")
+	if strings.Contains(out, "nueva") || !strings.Contains(out, "Default Mozilla Description") || !strings.Contains(out, "DESCRIPTION:otra") {
+		t.Fatalf("second set wrong: %q", out)
+	}
+}

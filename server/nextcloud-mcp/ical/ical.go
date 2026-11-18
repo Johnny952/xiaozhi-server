@@ -123,21 +123,32 @@ func splitOutsideQuotes(s string, c byte) []string {
 	}
 }
 
-// Field returns the first occurrence of property name (VTIMEZONE contents are
-// ignored), unfolded and unescaped, with its parameters (keys upper-cased).
+// nestedSkipper reports whether a line sits inside a nested component whose
+// properties must not be mistaken for the parent's (VTIMEZONE, VALARM).
+type nestedSkipper struct{ depth int }
+
+func (n *nestedSkipper) skip(line string) bool {
+	switch strings.ToUpper(strings.TrimSpace(line)) {
+	case "BEGIN:VTIMEZONE", "BEGIN:VALARM":
+		n.depth++
+		return true
+	case "END:VTIMEZONE", "END:VALARM":
+		if n.depth > 0 {
+			n.depth--
+		}
+		return true
+	}
+	return n.depth > 0
+}
+
+// Field returns the first occurrence of property name (VTIMEZONE and VALARM
+// contents are ignored), unfolded and unescaped, with its parameters (keys
+// upper-cased).
 func Field(ics, name string) (string, map[string]string, bool) {
 	name = strings.ToUpper(name)
-	inTZ := false
+	var sk nestedSkipper
 	for _, line := range unfold(ics) {
-		switch strings.ToUpper(strings.TrimSpace(line)) {
-		case "BEGIN:VTIMEZONE":
-			inTZ = true
-			continue
-		case "END:VTIMEZONE":
-			inTZ = false
-			continue
-		}
-		if inTZ {
+		if sk.skip(line) {
 			continue
 		}
 		n, params, v, ok := splitLine(line)
@@ -156,6 +167,7 @@ func SetVTodoField(ics, name, value string) string {
 	lines := strings.Split(raw, "\n")
 	var out []string
 	inTodo, done, skipping := false, false, false
+	nested := 0 // depth of components (VALARM...) inside the VTODO
 	for _, l := range lines {
 		if skipping {
 			if strings.HasPrefix(l, " ") || strings.HasPrefix(l, "\t") {
@@ -173,7 +185,11 @@ func SetVTodoField(ics, name, value string) string {
 				done = true
 			}
 			inTodo = false
-		case inTodo && !done:
+		case inTodo && strings.HasPrefix(up, "BEGIN:"):
+			nested++
+		case inTodo && nested > 0 && strings.HasPrefix(up, "END:"):
+			nested--
+		case inTodo && nested == 0 && !done:
 			if n, _, _, ok := splitLine(l); ok && n == strings.ToUpper(name) {
 				out = append(out, newLine)
 				done, skipping = true, true
@@ -390,7 +406,11 @@ func parseVEvent(body string, loc *time.Location) (Event, bool) {
 
 // rawField is Field without unescaping: RRULE is structured, not text.
 func rawField(ics, name string) (string, map[string]string, bool) {
+	var sk nestedSkipper
 	for _, line := range unfold(ics) {
+		if sk.skip(line) {
+			continue
+		}
 		if n, p, v, ok := splitLine(line); ok && n == name {
 			return strings.TrimSpace(v), p, true
 		}
