@@ -211,3 +211,60 @@ func TestSetVTodoFieldLeavesValarmAlone(t *testing.T) {
 		t.Fatalf("second set wrong: %q", out)
 	}
 }
+
+const wantAlarmBlock = "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER;RELATED=END:PT0S\r\nDESCRIPTION:Llamar\\, a Ana\r\nEND:VALARM\r\n"
+
+func TestMakeVTodoAlarm(t *testing.T) {
+	now := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+	due := now.Add(time.Hour)
+	out := MakeVTodo(Todo{UID: "u", Summary: "Llamar, a Ana", Due: &due, Alarm: true}, now)
+	if n := strings.Count(out, wantAlarmBlock); n != 1 {
+		t.Fatalf("alarm block count = %d in %q", n, out)
+	}
+	if strings.Index(out, "BEGIN:VALARM") > strings.Index(out, "END:VTODO") {
+		t.Fatalf("alarm not inside VTODO: %q", out)
+	}
+	if !strings.Contains(out, "END:VALARM\r\nEND:VTODO") {
+		t.Fatalf("alarm should precede END:VTODO: %q", out)
+	}
+}
+
+func TestMakeVTodoNoAlarmByDefault(t *testing.T) {
+	now := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+	due := now.Add(time.Hour)
+	if out := MakeVTodo(Todo{UID: "u", Summary: "x", Due: &due}, now); strings.Contains(out, "BEGIN:VALARM") {
+		t.Fatalf("unexpected alarm: %q", out)
+	}
+	if out := MakeVTodo(Todo{UID: "u", Summary: "x", Alarm: true}, now); strings.Contains(out, "BEGIN:VALARM") {
+		t.Fatalf("alarm without due: %q", out)
+	}
+}
+
+func TestParseVTodoAlarmRoundTrip(t *testing.T) {
+	now := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+	due := now.Add(time.Hour)
+	out := MakeVTodo(Todo{UID: "u", Summary: "Llamar", Description: "detalle", Due: &due, Alarm: true}, now)
+	got := ParseVTodo(out, time.UTC)
+	if !got.Alarm {
+		t.Fatal("Alarm not parsed")
+	}
+	if got.Description != "detalle" || got.Summary != "Llamar" {
+		t.Fatalf("got %+v", got)
+	}
+	if ParseVTodo(strings.Replace(out, "BEGIN:VALARM", "X-FOO:1\r\nBEGIN:VXX", 1), time.UTC).Alarm {
+		t.Fatal("Alarm true without VALARM")
+	}
+}
+
+func TestSetVTodoFieldIgnoresAlarm(t *testing.T) {
+	now := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+	due := now.Add(time.Hour)
+	out := MakeVTodo(Todo{UID: "u", Summary: "Llamar", Description: "vieja", Due: &due, Alarm: true}, now)
+	out = SetVTodoField(out, "DESCRIPTION", "x")
+	if !strings.Contains(out, "DESCRIPTION:x\r\n") || strings.Contains(out, "vieja") {
+		t.Fatalf("vtodo description not replaced: %q", out)
+	}
+	if !strings.Contains(out, "DESCRIPTION:Llamar\r\nEND:VALARM") {
+		t.Fatalf("alarm description changed: %q", out)
+	}
+}

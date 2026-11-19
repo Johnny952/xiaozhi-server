@@ -235,6 +235,8 @@ type Todo struct {
 	DueIsDate                                    bool
 	Priority                                     int
 	Completed                                    *time.Time
+	// Alarm adds a VALARM firing at DUE (only rendered when Due is set).
+	Alarm bool
 }
 
 // MakeVTodo renders a complete VCALENDAR holding one VTODO.
@@ -268,6 +270,10 @@ func MakeVTodo(t Todo, now time.Time) string {
 	if t.Completed != nil {
 		l = append(l, "COMPLETED:"+ToUTC(*t.Completed))
 	}
+	if t.Alarm && t.Due != nil {
+		l = append(l, "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER;RELATED=END:PT0S",
+			propLine("DESCRIPTION", t.Summary), "END:VALARM")
+	}
 	l = append(l, "END:VTODO", "END:VCALENDAR")
 	return strings.Join(l, "\r\n") + "\r\n"
 }
@@ -291,6 +297,12 @@ func ParseVTodo(ics string, loc *time.Location) Todo {
 	if v, params, ok := Field(ics, "COMPLETED"); ok {
 		if d, _, good := parseTime(v, params, loc); good {
 			t.Completed = &d
+		}
+	}
+	for _, line := range unfold(ics) {
+		if strings.EqualFold(strings.TrimSpace(line), "BEGIN:VALARM") {
+			t.Alarm = true
+			break
 		}
 	}
 	return t
