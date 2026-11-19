@@ -124,9 +124,18 @@ func eventCalendars(cals []nc.Calendar) []nc.Calendar {
 	return out
 }
 
-func todoCalendars(cals []nc.Calendar) []nc.Calendar {
+// RecordatoriosList is the Nextcloud task list that holds reminders; the
+// regular task tools ignore it.
+const RecordatoriosList = "Recordatorios"
+
+// todoCalendars returns the VTODO calendars, leaving out the Recordatorios
+// list unless includeRecordatorios is set.
+func todoCalendars(cals []nc.Calendar, includeRecordatorios bool) []nc.Calendar {
 	var out []nc.Calendar
 	for _, c := range cals {
+		if !includeRecordatorios && text.Normalize(c.Name) == text.Normalize(RecordatoriosList) {
+			continue
+		}
 		if c.Todos {
 			out = append(out, c)
 		}
@@ -513,7 +522,7 @@ func (d *Deps) resumenDelDia(ctx context.Context, req mcp.CallToolRequest) *mcp.
 	if err != nil {
 		return failErr("No pude leer la agenda", err)
 	}
-	todos, err := d.fetchTodos(ctx, todoCalendars(all))
+	todos, err := d.fetchTodos(ctx, todoCalendars(all, false))
 	if err != nil {
 		return failErr("No pude leer las tareas", err)
 	}
@@ -567,5 +576,5 @@ func (d *Deps) resumenDelDia(ctx context.Context, req mcp.CallToolRequest) *mcp.
 }
 
 func isCompleted(t ical.Todo) bool {
-	return strings.EqualFold(t.Status, "COMPLETED") || t.Completed != nil
+	return strings.EqualFold(t.Status, "COMPLETED") || strings.EqualFold(t.Status, "CANCELLED") || t.Completed != nil
 }

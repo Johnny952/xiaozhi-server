@@ -99,7 +99,7 @@ func (d *Deps) findProject(ctx context.Context, name string) (nc.Calendar, bool,
 	if err != nil {
 		return nc.Calendar{}, false, failErr("No pude leer los proyectos", err)
 	}
-	cals := todoCalendars(all)
+	cals := todoCalendars(all, false)
 	if c, found := findCalendar(cals, name); found {
 		return c, true, nil
 	}
@@ -217,7 +217,7 @@ func (d *Deps) tareasPendientes(ctx context.Context, req mcp.CallToolRequest) *m
 		if err != nil {
 			return failErr("No pude leer los proyectos", err)
 		}
-		cals = todoCalendars(all)
+		cals = todoCalendars(all, false)
 	}
 	todos, err := d.fetchTodos(ctx, cals)
 	if err != nil {
