@@ -14,6 +14,7 @@ const { MQTTProtocol } = require('./mqtt-protocol');
 const { ConfigManager } = require('./utils/config-manager');
 const { validateMqttCredentials } = require('./utils/mqtt_config_v2');
 const { createPushServer } = require('./push');
+const { PROTOCOL_VERSION, encodeAudio, decodeAudio } = require('./framing');
 
 
 function setDebugEnabled(enabled) {
@@ -62,7 +63,7 @@ class WebSocketBridge extends Emitter {
         return new Promise((resolve, reject) => {
             const headers = {
                 'device-id': this.macAddress,
-                'protocol-version': '2',
+                'protocol-version': String(PROTOCOL_VERSION),
                 'authorization': `Bearer test-token`
             };
             if (this.uuid) {
@@ -72,11 +73,12 @@ class WebSocketBridge extends Emitter {
                 headers['x-forwarded-for'] = this.userData.ip;
             } 
             this.wsClient = new WebSocket(this.chatServer, { headers });
+            this.audioStartMs = Date.now();
 
             this.wsClient.on('open', () => {
                 this.sendJson({
                     type: 'hello',
-                    version: 2,
+                    version: PROTOCOL_VERSION,
                     transport: 'websocket',
                     audio_params,
                     features
@@ -85,9 +87,7 @@ class WebSocketBridge extends Emitter {
 
             this.wsClient.on('message', (data, isBinary) => {
                 if (isBinary) {
-                    const timestamp = data.readUInt32BE(8);
-                    const opusLength = data.readUInt32BE(12);
-                    const opus = data.subarray(16, 16 + opusLength);
+                    const { opus, timestamp } = decodeAudio(data, (Date.now() - this.audioStartMs) >>> 0);
                     // 二进制数据通过UDP发送
                     this.connection.sendUdpMessage(opus, timestamp);
                 } else {
@@ -125,11 +125,7 @@ class WebSocketBridge extends Emitter {
 
     sendAudio(opus, timestamp) {
         if (this.wsClient && this.wsClient.readyState === WebSocket.OPEN) {
-            const buffer = Buffer.alloc(16 + opus.length);
-            buffer.writeUInt32BE(timestamp, 8);
-            buffer.writeUInt32BE(opus.length, 12);
-            buffer.set(opus, 16);
-            this.wsClient.send(buffer, { binary: true });
+            this.wsClient.send(encodeAudio(opus), { binary: true });
         }
     }
 
