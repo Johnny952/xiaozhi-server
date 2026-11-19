@@ -16,6 +16,7 @@ import (
 
 	"nextcloud-mcp/confirm"
 	"nextcloud-mcp/nc"
+	"nextcloud-mcp/state"
 	"nextcloud-mcp/tools"
 )
 
@@ -55,6 +56,9 @@ func run(env func(string) string, in io.Reader, out, errw io.Writer) int {
 		Confirm: confirm.New(time.Now, rand.Reader),
 		Now:     time.Now,
 		Loc:     loc,
+		State:   state.Open(stateFile(env)),
+		// RESUMEN_HORA: HH:MM, empty disables the daily summary.
+		ResumenHora: env("RESUMEN_HORA"),
 	}
 	for _, t := range tools.All(d) {
 		s.AddTool(t.Def, t.Handle)
@@ -71,4 +75,12 @@ func serve(s *server.MCPServer, in io.Reader, out, errw io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// stateFile is the shared state path (RECORDATORIOS_STATE overrides it).
+func stateFile(env func(string) string) string {
+	if p := env("RECORDATORIOS_STATE"); p != "" {
+		return p
+	}
+	return "/data/recordatorios-state.json"
 }

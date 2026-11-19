@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -37,8 +39,27 @@ func recordatorioTools(d *Deps) []Tool {
 			),
 			Handle: handler(d.recordatorioCancelar),
 		},
+		{
+			// Called by the server itself when the button is pressed; the
+			// server must not offer it to the LLM.
+			Def: mcp.NewTool("recordatorios_pendientes",
+				mcp.WithDescription("Uso interno del servidor, no la llames. Devuelve lo que hay que decir al abrir la conversación: recordatorios vencidos sin leer y el resumen del día; vacío si no hay nada."),
+			),
+			Handle: handler(d.recordatoriosPendientes),
+		},
 	}
 }
+
+// Marks written on reminder VTODOs. The scheduler (MarkNotified) and the
+// reading path (MarkSpoken) share them.
+const (
+	MarkNotified = "X-WEITA-NOTIFIED"
+	MarkSpoken   = "X-WEITA-SPOKEN"
+)
+
+// staleAfter is how long after DUE a never-spoken reminder is read as
+// "Tenías pendiente".
+const staleAfter = 24 * time.Hour
 
 // findRecordatorios returns the Recordatorios list if it exists.
 func (d *Deps) findRecordatorios(ctx context.Context) (nc.Calendar, bool, error) {
@@ -183,4 +204,75 @@ func (d *Deps) recordatorioCancelar(ctx context.Context, req mcp.CallToolRequest
 		return failErr("No pude cancelar el recordatorio", err)
 	}
 	return ok("Listo, cancelé el recordatorio '" + t.Summary + "'.")
+}
+
+// recordatoriosPendientes speaks the due reminders not yet spoken, marking
+// them, and then the morning summary once per day after ResumenHora. The
+// marking comes first so the summary leaves out what was just read. With
+// nothing to say it answers "" (not an error) so the server stays silent.
+func (d *Deps) recordatoriosPendientes(ctx context.Context, _ mcp.CallToolRequest) *mcp.CallToolResult {
+	todos, err := openRecordatorios(ctx, d)
+	if err != nil {
+		return failErr("No pude leer los recordatorios", err)
+	}
+	now := d.now()
+	var due []calTodo
+	for _, t := range todos {
+		if t.Due == nil || t.DueIsDate || t.Due.After(now) {
+			continue
+		}
+		if _, _, spoken := ical.Field(t.Obj.Data, MarkSpoken); spoken {
+			continue
+		}
+		due = append(due, t)
+	}
+	sort.SliceStable(due, func(i, j int) bool { return due[i].Due.Before(*due[j].Due) })
+
+	var parts []string
+	for _, t := range due {
+		data := ical.SetVTodoField(t.Obj.Data, MarkSpoken, "1")
+		data = ical.SetVTodoField(data, "STATUS", "COMPLETED")
+		data = ical.SetVTodoField(data, "COMPLETED", ical.ToUTC(now))
+		if _, err := d.NC.PutObject(ctx, t.Cal.ID, objUID(t.Obj.Href), data, t.Obj.ETag); err != nil {
+			continue // not marked, so it is read on the next press
+		}
+		if now.Sub(*t.Due) > staleAfter {
+			parts = append(parts, "Tenías pendiente: "+t.Summary+".")
+		} else {
+			parts = append(parts, "Recordatorio: "+t.Summary+".")
+		}
+	}
+	if r := d.resumenPendiente(ctx, now); r != "" {
+		parts = append(parts, r)
+	}
+	return ok(strings.Join(parts, " "))
+}
+
+// resumenPendiente returns the morning summary when it is due and not yet
+// read today, and marks it read. Any failure just skips it.
+func (d *Deps) resumenPendiente(ctx context.Context, now time.Time) string {
+	if d.State == nil || d.ResumenHora == "" {
+		return ""
+	}
+	at, err := time.ParseInLocation("15:04", d.ResumenHora, d.loc())
+	if err != nil {
+		return ""
+	}
+	y, m, dd := now.Date()
+	if now.Before(time.Date(y, m, dd, at.Hour(), at.Minute(), 0, 0, d.loc())) {
+		return ""
+	}
+	today := now.Format("2006-01-02")
+	st, err := d.State.Get()
+	if err != nil || st.ResumenLeido == today {
+		return ""
+	}
+	r, err := ResumenManana(ctx, d)
+	if err != nil {
+		return ""
+	}
+	if err := d.State.Set("resumen_leido", today); err != nil {
+		return "" // would repeat on every press; better silent
+	}
+	return r
 }

@@ -18,6 +18,7 @@ import (
 
 	"nextcloud-mcp/confirm"
 	"nextcloud-mcp/nc"
+	"nextcloud-mcp/state"
 )
 
 // Deps are the shared dependencies of all tools.
@@ -26,6 +27,11 @@ type Deps struct {
 	Confirm *confirm.Store
 	Now     func() time.Time
 	Loc     *time.Location
+	// State is the file shared with the scheduler; nil disables the summary
+	// part of recordatorios_pendientes.
+	State *state.Store
+	// ResumenHora is "HH:MM" from RESUMEN_HORA; empty disables the summary.
+	ResumenHora string
 }
 
 // Tool is one MCP tool definition with its handler.

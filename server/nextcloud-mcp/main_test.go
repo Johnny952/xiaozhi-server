@@ -68,7 +68,7 @@ func TestRunListsTools(t *testing.T) {
 			got[tl.Name] = true
 		}
 	}
-	if len(got) != 22 {
+	if len(got) != 23 {
 		t.Fatalf("got %d tools: %v", len(got), got)
 	}
 	for _, n := range want {
