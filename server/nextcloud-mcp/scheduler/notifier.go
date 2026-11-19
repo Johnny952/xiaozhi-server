@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // Aviso is the short alert shown on the device.
@@ -60,7 +61,13 @@ func (n HTTPNotifier) Notify(ctx context.Context, a Aviso) error {
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return fmt.Errorf("push: %w", errors.Unwrap(err))
+		// *url.Error wraps the cause; its text carries the URL, which holds no
+		// secret (the token travels in a header), but keep only the cause.
+		var ue *url.Error
+		if errors.As(err, &ue) && ue.Err != nil {
+			err = ue.Err
+		}
+		return fmt.Errorf("push: %w", err)
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))

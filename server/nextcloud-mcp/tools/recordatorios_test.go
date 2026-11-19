@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -253,4 +254,31 @@ func TestPendientesNadaDevuelveVacio(t *testing.T) {
 	if isErr || out != "" {
 		t.Errorf("want empty non-error, got %q err=%v", out, isErr)
 	}
+}
+
+type hookTransport struct {
+	next  http.RoundTripper
+	onPut func()
+}
+
+func (h *hookTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Method == http.MethodPut && h.onPut != nil {
+		f := h.onPut
+		h.onPut = nil
+		f()
+	}
+	return h.next.RoundTrip(r)
+}
+
+func TestPendientesConflictoReleeYReintenta(t *testing.T) {
+	now := at(18, 8, 0)
+	d, c, _ := pendFixture(t, now, "")
+	addRec(c, "a", "llamar al proveedor", now.Add(-10*time.Minute))
+	// The scheduler writes NOTIFIED between our read and our mark PUT.
+	d.NC.HTTP.Transport = &hookTransport{next: http.DefaultTransport, onPut: func() {
+		c.Objects["a.ics"] = ical.SetVTodoField(c.Objects["a.ics"], MarkNotified, "1")
+	}}
+	out := pendientes(t, d)
+	mustContain(t, out, "llamar al proveedor")
+	mustContain(t, c.Objects["a.ics"], "X-WEITA-SPOKEN:", "X-WEITA-NOTIFIED:", "STATUS:COMPLETED")
 }

@@ -60,6 +60,12 @@ func run(env func(string) string, in io.Reader, out, errw io.Writer) int {
 		}
 	}
 
+	resumenHora := env("RESUMEN_HORA")
+	if err := scheduler.ValidarResumenHora(resumenHora); err != nil {
+		// Do not crash the MCP: just run without the daily summary.
+		fmt.Fprintf(errw, "nextcloud-mcp: %v; resumen diario desactivado\n", err)
+		resumenHora = ""
+	}
 	d := &tools.Deps{
 		NC:      nc.New(env("NEXTCLOUD_URL"), env("NEXTCLOUD_USER"), env("NEXTCLOUD_PASSWORD")),
 		Confirm: confirm.New(time.Now, rand.Reader),
@@ -67,7 +73,7 @@ func run(env func(string) string, in io.Reader, out, errw io.Writer) int {
 		Loc:     loc,
 		State:   state.Open(state.Path(env)),
 		// RESUMEN_HORA: HH:MM, empty disables the daily summary.
-		ResumenHora: env("RESUMEN_HORA"),
+		ResumenHora: resumenHora,
 	}
 	for _, t := range tools.All(d) {
 		s.AddTool(t.Def, t.Handle)

@@ -165,7 +165,7 @@ func (s *Scheduler) avisarResumen(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if st.ResumenEnviado == today {
+	if st.ResumenEnviado == today || st.ResumenLeido == today {
 		return nil
 	}
 	if err := s.N.Notify(ctx, Aviso{Titulo: "Buenos días", Texto: "Tienes tu resumen del día"}); err != nil {
@@ -175,6 +175,17 @@ func (s *Scheduler) avisarResumen(ctx context.Context, now time.Time) error {
 		return err
 	}
 	return s.State.Set("resumen_enviado", today)
+}
+
+// ValidarResumenHora checks RESUMEN_HORA: empty (summary disabled) or "HH:MM".
+func ValidarResumenHora(v string) error {
+	if v == "" {
+		return nil
+	}
+	if _, err := time.Parse("15:04", v); err != nil {
+		return fmt.Errorf("RESUMEN_HORA inválida %q: se espera HH:MM (p. ej. 07:30) o vacío", v)
+	}
+	return nil
 }
 
 // Run is the scheduler subcommand: it loops every minute until SIGTERM/SIGINT.
@@ -189,6 +200,10 @@ func Run(env func(string) string, errw io.Writer) int {
 	}
 	if len(missing) > 0 {
 		fmt.Fprintf(errw, "nextcloud-mcp scheduler: faltan variables: %s\n", strings.Join(missing, ", "))
+		return 1
+	}
+	if err := ValidarResumenHora(env("RESUMEN_HORA")); err != nil {
+		fmt.Fprintf(errw, "nextcloud-mcp scheduler: %v\n", err)
 		return 1
 	}
 	loc, err := time.LoadLocation(env("TZ"))

@@ -230,10 +230,7 @@ func (d *Deps) recordatoriosPendientes(ctx context.Context, _ mcp.CallToolReques
 
 	var parts []string
 	for _, t := range due {
-		data := ical.SetVTodoField(t.Obj.Data, MarkSpoken, "1")
-		data = ical.SetVTodoField(data, "STATUS", "COMPLETED")
-		data = ical.SetVTodoField(data, "COMPLETED", ical.ToUTC(now))
-		if _, err := d.NC.PutObject(ctx, t.Cal.ID, objUID(t.Obj.Href), data, t.Obj.ETag); err != nil {
+		if !d.marcarHablado(ctx, t, now) {
 			continue // not marked, so it is read on the next press
 		}
 		if now.Sub(*t.Due) > staleAfter {
@@ -246,6 +243,34 @@ func (d *Deps) recordatoriosPendientes(ctx context.Context, _ mcp.CallToolReques
 		parts = append(parts, r)
 	}
 	return ok(strings.Join(parts, " "))
+}
+
+// marcarHablado marks a reminder as spoken and completed. If the scheduler
+// wrote its NOTIFIED mark between our read and this PUT (412), it re-reads that
+// one VTODO once and retries, so the reminder is not delayed to the next press.
+func (d *Deps) marcarHablado(ctx context.Context, t calTodo, now time.Time) bool {
+	obj := t.Obj
+	for attempt := 0; attempt < 2; attempt++ {
+		data := ical.SetVTodoField(obj.Data, MarkSpoken, "1")
+		data = ical.SetVTodoField(data, "STATUS", "COMPLETED")
+		data = ical.SetVTodoField(data, "COMPLETED", ical.ToUTC(now))
+		_, err := d.NC.PutObject(ctx, t.Cal.ID, objUID(obj.Href), data, obj.ETag)
+		if err == nil {
+			return true
+		}
+		if !errors.Is(err, nc.ErrConflict) || attempt == 1 {
+			return false
+		}
+		fresh, gerr := d.NC.GetObject(ctx, obj.Href)
+		if gerr != nil {
+			return false
+		}
+		if _, _, spoken := ical.Field(fresh.Data, MarkSpoken); spoken {
+			return false
+		}
+		obj = fresh
+	}
+	return false
 }
 
 // resumenPendiente returns the morning summary when it is due and not yet

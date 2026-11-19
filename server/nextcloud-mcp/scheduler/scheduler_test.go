@@ -325,3 +325,76 @@ func TestRunFaltanEnv(t *testing.T) {
 		t.Errorf("stderr: %q", errb.String())
 	}
 }
+
+func TestTickResumenYaLeidoNoAvisa(t *testing.T) {
+	fx := newFixture(t, at(7, 31), "07:30")
+	if err := fx.st.Set("resumen_leido", "2026-11-18"); err != nil {
+		t.Fatal(err)
+	}
+	fx.tick(t)
+	if len(fx.n.avisos) != 0 {
+		t.Errorf("avisos: %+v", fx.n.avisos)
+	}
+}
+
+func TestHTTPNotifierErrorDeTransporteConCausaSinToken(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	url := srv.URL
+	srv.Close() // connection refused
+	n := HTTPNotifier{URL: url, Token: "s3cr3t-token", Client: &http.Client{}}
+	err := n.Notify(context.Background(), Aviso{})
+	if err == nil {
+		t.Fatal("want error")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "%!") || strings.Contains(msg, "nil") {
+		t.Errorf("no cause: %q", msg)
+	}
+	if !strings.Contains(msg, "refused") && !strings.Contains(msg, "connect") {
+		t.Errorf("cause missing: %q", msg)
+	}
+	if strings.Contains(msg, "s3cr3t-token") {
+		t.Errorf("token leaked: %q", msg)
+	}
+}
+
+func TestValidarResumenHora(t *testing.T) {
+	for _, ok := range []string{"", "07:30", "00:00", "23:59"} {
+		if err := ValidarResumenHora(ok); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"7h30", "25:00", "07:60", "abc", "7:3x"} {
+		if err := ValidarResumenHora(bad); err == nil {
+			t.Errorf("%q: want error", bad)
+		}
+	}
+}
+
+func fullEnv(over map[string]string) func(string) string {
+	m := map[string]string{"NEXTCLOUD_URL": "http://x", "NEXTCLOUD_USER": "u", "NEXTCLOUD_PASSWORD": "p", "PUSH_URL": "http://y", "PUSH_TOKEN": "t"}
+	for k, v := range over {
+		m[k] = v
+	}
+	return func(k string) string { return m[k] }
+}
+
+func TestRunResumenHoraInvalidaFallaRapido(t *testing.T) {
+	var errb strings.Builder
+	if code := Run(fullEnv(map[string]string{"RESUMEN_HORA": "mañana"}), &errb); code == 0 {
+		t.Error("want non-zero")
+	}
+	if !strings.Contains(errb.String(), "RESUMEN_HORA") {
+		t.Errorf("stderr: %q", errb.String())
+	}
+}
+
+func TestRunPushTokenVacio(t *testing.T) {
+	var errb strings.Builder
+	if code := Run(fullEnv(map[string]string{"PUSH_TOKEN": ""}), &errb); code == 0 {
+		t.Error("want non-zero")
+	}
+	if !strings.Contains(errb.String(), "PUSH_TOKEN") {
+		t.Errorf("stderr: %q", errb.String())
+	}
+}
