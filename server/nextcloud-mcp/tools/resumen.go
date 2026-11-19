@@ -44,7 +44,7 @@ func ResumenManana(ctx context.Context, d *Deps) (string, error) {
 		case 1:
 			todos, err = d.fetchTodos(ctx, todoCalendars(cals, false))
 		default:
-			recs, err = openRecordatorios(ctx, d)
+			recs, err = OpenRecordatorios(ctx, d)
 		}
 		return err
 	})

@@ -90,9 +90,9 @@ func ensureRecordatorios(ctx context.Context, d *Deps) (nc.Calendar, error) {
 	return cal, err
 }
 
-// openRecordatorios returns the not-closed reminders of the list (none if the
+// OpenRecordatorios returns the not-closed reminders of the list (none if the
 // list does not exist yet), with href, etag and parsed VTODO.
-func openRecordatorios(ctx context.Context, d *Deps) ([]calTodo, error) {
+func OpenRecordatorios(ctx context.Context, d *Deps) ([]calTodo, error) {
 	cal, found, err := d.findRecordatorios(ctx)
 	if err != nil || !found {
 		return nil, err
@@ -138,7 +138,7 @@ func (d *Deps) recordatorioCrear(ctx context.Context, req mcp.CallToolRequest) *
 }
 
 func (d *Deps) recordatorioListar(ctx context.Context, _ mcp.CallToolRequest) *mcp.CallToolResult {
-	todos, err := openRecordatorios(ctx, d)
+	todos, err := OpenRecordatorios(ctx, d)
 	if err != nil {
 		return failErr("No pude leer los recordatorios", err)
 	}
@@ -165,7 +165,7 @@ func (d *Deps) recordatorioCancelar(ctx context.Context, req mcp.CallToolRequest
 	if texto == "" && uid == "" {
 		return fail("Dime qué recordatorio cancelar: texto o uid.")
 	}
-	todos, err := openRecordatorios(ctx, d)
+	todos, err := OpenRecordatorios(ctx, d)
 	if err != nil {
 		return failErr("No pude leer los recordatorios", err)
 	}
@@ -211,7 +211,7 @@ func (d *Deps) recordatorioCancelar(ctx context.Context, req mcp.CallToolRequest
 // marking comes first so the summary leaves out what was just read. With
 // nothing to say it answers "" (not an error) so the server stays silent.
 func (d *Deps) recordatoriosPendientes(ctx context.Context, _ mcp.CallToolRequest) *mcp.CallToolResult {
-	todos, err := openRecordatorios(ctx, d)
+	todos, err := OpenRecordatorios(ctx, d)
 	if err != nil {
 		return failErr("No pude leer los recordatorios", err)
 	}

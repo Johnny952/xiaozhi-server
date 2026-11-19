@@ -23,6 +23,14 @@ type Store struct {
 	path string
 }
 
+// Path is the shared state path (RECORDATORIOS_STATE overrides the default).
+func Path(env func(string) string) string {
+	if p := env("RECORDATORIOS_STATE"); p != "" {
+		return p
+	}
+	return "/data/recordatorios-state.json"
+}
+
 // Open returns a Store for path. Nothing is touched until Get or Set.
 func Open(path string) *Store { return &Store{path: path} }
 

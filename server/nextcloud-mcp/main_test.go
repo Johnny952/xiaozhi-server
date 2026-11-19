@@ -77,3 +77,14 @@ func TestRunListsTools(t *testing.T) {
 		}
 	}
 }
+
+func TestSchedulerFaltanEnv(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := dispatch([]string{"nextcloud-mcp", "scheduler"}, func(string) string { return "" }, strings.NewReader(""), &out, &errb)
+	if code == 0 {
+		t.Fatalf("want non-zero, stderr %q", errb.String())
+	}
+	if !strings.Contains(errb.String(), "PUSH_TOKEN") {
+		t.Errorf("stderr = %q", errb.String())
+	}
+}
