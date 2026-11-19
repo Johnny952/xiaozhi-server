@@ -11,7 +11,32 @@ Servidor MCP en Go (stdio) que expone agenda, tareas, bitácora y notas de Nextc
 | `NEXTCLOUD_PASSWORD` | App password de Nextcloud (obligatoria) |
 | `TZ` | Zona horaria, p. ej. `America/Santiago` (obligatoria; se embebe `time/tzdata`) |
 
+Variables opcionales (MCP y scheduler):
+
+| Variable | Descripción |
+|---|---|
+| `RESUMEN_HORA` | Hora (HH:MM) del resumen diario; vacía = sin resumen |
+| `RECORDATORIOS_STATE` | Archivo de estado compartido (por defecto `/data/recordatorios-state.json`) |
+
 Si falta alguna, el binario avisa en stderr y sigue respondiendo el protocolo MCP **sin ninguna tool** (no sale, para no retrasar la conexión de los dispositivos); el servidor de voz sigue funcionando sin estas tools.
+
+## Subcomando `scheduler`
+
+`nextcloud-mcp scheduler` corre el proceso de avisos (servicio `recordatorios` en compose, misma imagen que `xiaozhi`). Revisa los recordatorios de Nextcloud Tasks y empuja alerts al `mqtt-gateway` por `POST /push`; además dispara el resumen diario. Comparte con el MCP por stdio el archivo de estado (volumen `recordatorios-state` en `/data`), así no repite avisos tras reiniciar.
+
+| Variable | Descripción |
+|---|---|
+| `NEXTCLOUD_URL`, `NEXTCLOUD_USER`, `NEXTCLOUD_PASSWORD` | Obligatorias |
+| `PUSH_URL` | Endpoint interno del gateway (`http://mqtt-gateway:8007/push`) |
+| `PUSH_TOKEN` | Token bearer del gateway |
+| `RECORDATORIOS_MAC` | MAC del parlante destino; vacía = todos los conectados |
+| `RESUMEN_HORA` | HH:MM del resumen diario; vacía = sin resumen |
+| `RECORDATORIOS_STATE` | Ruta del estado (por defecto `/data/recordatorios-state.json`) |
+| `TZ` | `America/Santiago` |
+
+## Tool oculta
+
+`recordatorios_pendientes` es de uso interno: la consume el flujo del botón del alert para leer los avisos pendientes, y no está pensada para pedirla por voz.
 
 ## Tests
 

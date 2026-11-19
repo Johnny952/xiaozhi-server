@@ -45,3 +45,15 @@ Compuerta antes de seguir con los recordatorios: valida que el parlante hable po
 - [ ] **4. Rollback.** `MQTTUDP_ENABLED=false`, recrear `xiaozhi`, reiniciar el parlante: debe volver a WebSocket. Si el firmware se queda pegado a MQTT por la NVS, el rollback es dejar el gateway levantado; anotar el resultado.
 
 Resultado: _(pendiente)_
+
+## Recordatorios: checklist E2E
+
+Requiere el Milestone 0 aprobado. Agregar al `.env` (lo hace el usuario): `RECORDATORIOS_MAC` (MAC del parlante; vacío = todos los conectados) y `RESUMEN_HORA` (HH:MM, America/Santiago; vacío = sin resumen). Luego `docker compose up -d --build`.
+
+- [ ] **1.** "Recuérdame en 3 minutos tomar agua": aparece en Nextcloud Tasks, en la lista Recordatorios, con alarma.
+- [ ] **2.** A los 3 minutos aparece el alert en la pantalla.
+- [ ] **3.** Apretar el botón: el parlante lo lee y en Nextcloud la tarea queda completada.
+- [ ] **4.** "¿Qué recordatorios tengo?" y luego "cancela el de tomar agua".
+- [ ] **5.** Con `RESUMEN_HORA` 2 minutos adelante: alert "Buenos días"; el botón lee el resumen; una segunda vez no lo repite.
+- [ ] **6.** `docker compose restart recordatorios`: no repite avisos ya dados.
+- [ ] **7.** "¿Qué tareas tengo?" no muestra los recordatorios.
