@@ -147,6 +147,11 @@ type ConnectionHandler struct {
 	functionRegister *function.FunctionRegistry
 	mcpManager       *mcp.Manager
 
+	// hello "pendientes" hooks; nil means use the defaults (mcpManager / SystemSpeak)
+	pendientesExec  func(ctx context.Context, name string, args map[string]interface{}) (interface{}, error)
+	pendientesSpeak func(text string) error
+	pendientesReady func() bool
+
 	mcpResultHandlers map[string]MCPResultHandler // MCP处理器映射
 	ctx               context.Context
 }

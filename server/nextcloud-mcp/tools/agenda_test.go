@@ -281,6 +281,41 @@ func TestResumenDelDiaFilter(t *testing.T) {
 	if isErr {
 		t.Fatal(out)
 	}
-	mustContain(t, out, "Dentista", "Pagar luz", "Comprar pan", "Llamar banco", "[Casa]")
-	mustNotContain(t, out, "Cumpleaños", "Hecha ya", "Algún día", "Sin prioridad", "Futura")
+	want := "Hoy miércoles 18: a las 10, Dentista. Vence hoy: Comprar pan. Prioridad alta: Llamar banco. Quedaron atrasadas: Pagar luz, del domingo. ¿La reagendo o la cancelo?"
+	if out != want {
+		t.Errorf("got:\n%s\nwant:\n%s", out, want)
+	}
+}
+
+func TestTareasPendientesExcluyeRecordatorios(t *testing.T) {
+	d, f := newDeps(t)
+	f.AddCalendar("personal", "Personal", "VTODO").Objects["a.ics"] = todoICS("a", "Regar plantas", nil, false, 5, "")
+	f.AddCalendar("recordatorios", "Recordatorios", "VTODO").Objects["r.ics"] = todoICS("r", "Llamar al dentista", nil, false, 5, "")
+	out, isErr := call(t, All(d), "tareas_pendientes", map[string]any{})
+	if isErr {
+		t.Fatal(out)
+	}
+	mustContain(t, out, "Regar plantas")
+	mustNotContain(t, out, "dentista")
+}
+
+func TestTareaCompletarNoVeRecordatorios(t *testing.T) {
+	d, f := newDeps(t)
+	f.AddCalendar("personal", "Personal", "VTODO")
+	f.AddCalendar("recordatorios", "Recordatorios", "VTODO").Objects["r.ics"] = todoICS("r", "Llamar al dentista", nil, false, 5, "")
+	out, _ := call(t, All(d), "tarea_completar", map[string]any{"proyecto": "Recordatorios", "tarea": "dentista"})
+	mustContain(t, out, "No existe el proyecto")
+	if strings.Contains(f.Cal("recordatorios").Objects["r.ics"], "STATUS:COMPLETED") {
+		t.Error("reminder was modified")
+	}
+}
+
+func TestTareasPendientesDescartaCancelled(t *testing.T) {
+	d, f := newDeps(t)
+	c := f.AddCalendar("casa", "Casa", "VTODO")
+	c.Objects["a.ics"] = todoICS("a", "Regar", nil, false, 5, "")
+	c.Objects["b.ics"] = todoICS("b", "Barrer", nil, false, 5, "CANCELLED")
+	out, _ := call(t, All(d), "tareas_pendientes", map[string]any{})
+	mustContain(t, out, "Regar")
+	mustNotContain(t, out, "Barrer")
 }

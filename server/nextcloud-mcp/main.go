@@ -16,11 +16,21 @@ import (
 
 	"nextcloud-mcp/confirm"
 	"nextcloud-mcp/nc"
+	"nextcloud-mcp/scheduler"
+	"nextcloud-mcp/state"
 	"nextcloud-mcp/tools"
 )
 
 func main() {
-	os.Exit(run(os.Getenv, os.Stdin, os.Stdout, os.Stderr))
+	os.Exit(dispatch(os.Args, os.Getenv, os.Stdin, os.Stdout, os.Stderr))
+}
+
+// dispatch runs the "scheduler" subcommand, or the MCP server otherwise.
+func dispatch(args []string, env func(string) string, in io.Reader, out, errw io.Writer) int {
+	if len(args) > 1 && args[1] == "scheduler" {
+		return scheduler.Run(env, errw)
+	}
+	return run(env, in, out, errw)
 }
 
 // run serves MCP over in/out until in reaches EOF. stdout carries only MCP
@@ -50,11 +60,20 @@ func run(env func(string) string, in io.Reader, out, errw io.Writer) int {
 		}
 	}
 
+	resumenHora := env("RESUMEN_HORA")
+	if err := scheduler.ValidarResumenHora(resumenHora); err != nil {
+		// Do not crash the MCP: just run without the daily summary.
+		fmt.Fprintf(errw, "nextcloud-mcp: %v; resumen diario desactivado\n", err)
+		resumenHora = ""
+	}
 	d := &tools.Deps{
 		NC:      nc.New(env("NEXTCLOUD_URL"), env("NEXTCLOUD_USER"), env("NEXTCLOUD_PASSWORD")),
 		Confirm: confirm.New(time.Now, rand.Reader),
 		Now:     time.Now,
 		Loc:     loc,
+		State:   state.Open(state.Path(env)),
+		// RESUMEN_HORA: HH:MM, empty disables the daily summary.
+		ResumenHora: resumenHora,
 	}
 	for _, t := range tools.All(d) {
 		s.AddTool(t.Def, t.Handle)

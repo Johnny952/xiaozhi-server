@@ -14,6 +14,11 @@ services:
       MQTTUDP_ENABLED: ${MQTTUDP_ENABLED:-false}
       MQTT_USERNAME: ${MQTT_USERNAME:-}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      # El MCP por stdio hereda esta env (mcp-go mezcla os.Environ()).
+      RESUMEN_HORA: ${RESUMEN_HORA:-}
+      RECORDATORIOS_STATE: /data/recordatorios-state.json
+    volumes:
+      - recordatorios-state:/data
     ports:
       # LAN-only: fail instead of silently binding 0.0.0.0 when LAN_IP is unset
       - "${LAN_IP:?LAN_IP must be set}:8100:8000"
@@ -45,6 +50,33 @@ services:
       - "${LAN_IP:?LAN_IP must be set}:8884:8884/udp"
     depends_on:
       - xiaozhi
+    networks:
+      - xiaozhi-net
+    restart: unless-stopped
+
+  recordatorios:
+    # Misma imagen que xiaozhi (mismo build y tag); solo cambia el entrypoint
+    # (scheduler de avisos). Con build propio, `up -d` no intenta hacer pull.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: xiaozhi-server:dev
+    entrypoint: ["/app/nextcloud-mcp", "scheduler"]
+    environment:
+      TZ: America/Santiago
+      NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
+      NEXTCLOUD_USER: ${NEXTCLOUD_USER:-}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
+      PUSH_URL: http://mqtt-gateway:8007/push
+      PUSH_TOKEN: ${PUSH_TOKEN:-}
+      RECORDATORIOS_MAC: ${RECORDATORIOS_MAC:-}
+      RESUMEN_HORA: ${RESUMEN_HORA:-}
+      RECORDATORIOS_STATE: /data/recordatorios-state.json
+    volumes:
+      - recordatorios-state:/data
+    depends_on:
+      - xiaozhi
+      - mqtt-gateway
     networks:
       - xiaozhi-net
     restart: unless-stopped
@@ -125,6 +157,7 @@ services:
 volumes:
   speaches-models:
   litellm-db-data:
+  recordatorios-state:
 
 networks:
   xiaozhi-net:

@@ -50,7 +50,7 @@ func TestRunListsTools(t *testing.T) {
 	want := []string{"bitacora_anotar", "bitacora_corregir", "bitacora_leer", "resumen_del_dia", "agenda",
 		"evento_crear", "evento_cancelar", "tareas_pendientes", "tarea_crear", "tarea_completar",
 		"tarea_anotar", "tarea_cambiar", "tarea_borrar", "nota_guardar", "notas_buscar",
-		"estado_proyecto_anotar", "estado_proyecto_leer", "archivo_leer", "confirmar"}
+		"estado_proyecto_anotar", "estado_proyecto_leer", "archivo_leer", "confirmar", "recordatorio_crear", "recordatorio_listar", "recordatorio_cancelar"}
 	got := map[string]bool{}
 	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
 		var m struct {
@@ -68,12 +68,23 @@ func TestRunListsTools(t *testing.T) {
 			got[tl.Name] = true
 		}
 	}
-	if len(got) != 19 {
+	if len(got) != 23 {
 		t.Fatalf("got %d tools: %v", len(got), got)
 	}
 	for _, n := range want {
 		if !got[n] {
 			t.Errorf("missing tool %s", n)
 		}
+	}
+}
+
+func TestSchedulerFaltanEnv(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := dispatch([]string{"nextcloud-mcp", "scheduler"}, func(string) string { return "" }, strings.NewReader(""), &out, &errb)
+	if code == 0 {
+		t.Fatalf("want non-zero, stderr %q", errb.String())
+	}
+	if !strings.Contains(errb.String(), "PUSH_TOKEN") {
+		t.Errorf("stderr = %q", errb.String())
 	}
 }
