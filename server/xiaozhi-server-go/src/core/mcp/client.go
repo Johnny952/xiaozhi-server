@@ -195,6 +195,9 @@ func (c *Client) HasTool(name string) bool {
 	return false
 }
 
+// hiddenTools are callable server-side (HasTool/CallTool) but never offered to the LLM.
+var hiddenTools = map[string]bool{"recordatorios_pendientes": true}
+
 // GetAvailableTools 获取所有可用工具
 func (c *Client) GetAvailableTools() []openai.Tool {
 	c.mu.RLock()
@@ -202,6 +205,9 @@ func (c *Client) GetAvailableTools() []openai.Tool {
 
 	result := make([]openai.Tool, 0, len(c.tools))
 	for _, tool := range c.tools {
+		if hiddenTools[tool.Name] {
+			continue
+		}
 		openaiTool := openai.Tool{
 			Type: "function",
 			Function: &openai.FunctionDefinition{

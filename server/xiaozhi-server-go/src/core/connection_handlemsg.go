@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 	"xiaozhi-server-go/src/core/chat"
 	"xiaozhi-server-go/src/core/image"
 	"xiaozhi-server-go/src/core/providers"
@@ -136,6 +137,7 @@ func (h *ConnectionHandler) handleHelloMessage(msgMap map[string]interface{}) er
 			h.clientAudioFormat, h.clientAudioSampleRate, h.clientAudioChannels, h.clientAudioFrameDuration))
 	}
 	h.sendHelloMessage()
+	go h.speakPendientes(h.ctx)
 	h.closeOpusDecoder()
 	// 初始化opus解码器
 	opusDecoder, err := utils.NewOpusDecoder(&utils.OpusDecoderConfig{
@@ -298,4 +300,74 @@ func (h *ConnectionHandler) handleImageMessage(ctx context.Context, msgMap map[s
 	}
 
 	return h.genResponseByVLLM(ctx, messages, imageData, text, currentRound)
+}
+
+const pendientesTool = "recordatorios_pendientes"
+
+// speakPendientes silently calls the MCP tool and speaks its text if non-empty.
+// It never blocks the hello and stays silent (log only) on any failure.
+func (h *ConnectionHandler) speakPendientes(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			h.LogError(fmt.Sprintf("[pendientes] panic recuperado: %v", r))
+		}
+	}()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	exec, speak, ready := h.pendientesExec, h.pendientesSpeak, h.pendientesReady
+	if exec == nil || ready == nil {
+		if h.mcpManager == nil {
+			return
+		}
+		if exec == nil {
+			exec = h.mcpManager.ExecuteTool
+		}
+		if ready == nil {
+			ready = func() bool { return h.mcpManager.IsToolReady(pendientesTool) }
+		}
+	}
+	if speak == nil {
+		speak = h.SystemSpeak
+	}
+
+	// wait up to 2s for MCP readiness, polling every 100ms
+	deadline := time.Now().Add(2 * time.Second)
+	for !ready() {
+		if time.Now().After(deadline) {
+			h.LogInfo("[pendientes] MCP no listo, se omite")
+			return
+		}
+		select {
+		case <-h.stopChan:
+			return
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	res, err := exec(callCtx, pendientesTool, map[string]interface{}{})
+	if err != nil {
+		h.LogInfo(fmt.Sprintf("[pendientes] error al consultar: %v", err))
+		return
+	}
+	text, _ := res.(string)
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	select {
+	case <-h.stopChan:
+		return
+	default:
+	}
+	if h.dialogueManager != nil {
+		h.dialogueManager.Put(chat.Message{Role: "assistant", Content: text})
+	}
+	if err := speak(text); err != nil {
+		h.LogInfo(fmt.Sprintf("[pendientes] error al hablar: %v", err))
+	}
 }

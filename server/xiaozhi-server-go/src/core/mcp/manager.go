@@ -405,6 +405,19 @@ func (m *Manager) IsMCPTool(toolName string) bool {
 	return false
 }
 
+// IsToolReady reports whether a ready client exposes the tool (raw or mcp_ name),
+// including tools hidden from the LLM.
+func (m *Manager) IsToolReady(toolName string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, client := range m.clients {
+		if client.IsReady() && client.HasTool(toolName) {
+			return true
+		}
+	}
+	return false
+}
+
 // ExecuteTool 执行工具调用
 func (m *Manager) ExecuteTool(
 	ctx context.Context,
