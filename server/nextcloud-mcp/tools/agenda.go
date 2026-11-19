@@ -71,7 +71,7 @@ func agendaTools(d *Deps) []Tool {
 		},
 		{
 			Def: mcp.NewTool("resumen_del_dia",
-				mcp.WithDescription("Resumen de hoy: eventos del día y tareas vencidas, que vencen hoy o de prioridad alta."),
+				mcp.WithDescription("Resumen breve de hoy: eventos, recordatorios, tareas que vencen hoy, de prioridad alta y atrasadas."),
 			),
 			Handle: handler(d.resumenDelDia),
 		},
@@ -508,71 +508,6 @@ func lastPath(p string) string {
 		return strings.TrimRight(p, "/")[i+1:]
 	}
 	return p
-}
-
-func (d *Deps) resumenDelDia(ctx context.Context, req mcp.CallToolRequest) *mcp.CallToolResult {
-	now := d.now()
-	today := dayStart(now)
-	tomorrow := today.AddDate(0, 0, 1)
-	all, err := d.NC.Calendars(ctx)
-	if err != nil {
-		return failErr("No pude leer los calendarios", err)
-	}
-	evs, err := d.fetchEvents(ctx, eventCalendars(all), today, tomorrow, true)
-	if err != nil {
-		return failErr("No pude leer la agenda", err)
-	}
-	todos, err := d.fetchTodos(ctx, todoCalendars(all, false))
-	if err != nil {
-		return failErr("No pude leer las tareas", err)
-	}
-	type item struct {
-		rank int
-		due  time.Time
-		line string
-	}
-	var items []item
-	for _, t := range todos {
-		if isCompleted(t.Todo) {
-			continue
-		}
-		label := t.Summary + " [" + t.Cal.Name + "]"
-		switch {
-		case t.Due != nil && t.Due.Before(today):
-			items = append(items, item{0, *t.Due, label + " — vencida " + text.Human(*t.Due, now, !t.DueIsDate)})
-		case t.Due != nil && t.Due.Before(tomorrow):
-			items = append(items, item{1, *t.Due, label + " — vence hoy"})
-		case t.Priority >= 1 && t.Priority <= 4:
-			items = append(items, item{2, time.Time{}, label + " — prioridad alta"})
-		}
-	}
-	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].rank != items[j].rank {
-			return items[i].rank < items[j].rank
-		}
-		return items[i].due.Before(items[j].due)
-	})
-	var b strings.Builder
-	b.WriteString("Resumen de hoy, " + fmtDate(today) + ". ")
-	if len(evs) == 0 {
-		b.WriteString("Eventos: ninguno. ")
-	} else {
-		lines := make([]string, len(evs))
-		for i, e := range evs {
-			lines[i] = d.fmtEvent(e)
-		}
-		b.WriteString("Eventos: " + text.List(lines, maxListItems) + ". ")
-	}
-	if len(items) == 0 {
-		b.WriteString("Tareas: nada urgente.")
-	} else {
-		lines := make([]string, len(items))
-		for i, it := range items {
-			lines[i] = it.line
-		}
-		b.WriteString("Tareas: " + text.List(lines, maxListItems) + ".")
-	}
-	return ok(b.String())
 }
 
 func isCompleted(t ical.Todo) bool {

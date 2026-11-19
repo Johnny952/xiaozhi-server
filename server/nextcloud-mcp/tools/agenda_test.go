@@ -281,8 +281,10 @@ func TestResumenDelDiaFilter(t *testing.T) {
 	if isErr {
 		t.Fatal(out)
 	}
-	mustContain(t, out, "Dentista", "Pagar luz", "Comprar pan", "Llamar banco", "[Casa]")
-	mustNotContain(t, out, "Cumpleaños", "Hecha ya", "Algún día", "Sin prioridad", "Futura")
+	want := "Hoy miércoles 18: a las 10, Dentista. Vence hoy: Comprar pan. Prioridad alta: Llamar banco. Quedaron atrasadas: Pagar luz, del domingo. ¿La reagendo o la cancelo?"
+	if out != want {
+		t.Errorf("got:\n%s\nwant:\n%s", out, want)
+	}
 }
 
 func TestTareasPendientesExcluyeRecordatorios(t *testing.T) {
