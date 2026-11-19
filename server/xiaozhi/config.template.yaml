@@ -126,8 +126,8 @@ ASR:
     # Server-side end-of-speech detection (energy VAD), needed for listen mode "auto",
     # where the device never sends "stop". Raise vad_threshold if room noise triggers it.
     vad_enabled: true
-    vad_threshold: 500 # RMS of int16 PCM
-    vad_silence_ms: 800 # trailing silence that ends an utterance
+    vad_threshold: 800 # RMS of int16 PCM
+    vad_silence_ms: 600 # trailing silence that ends an utterance
     vad_min_speech_ms: 200 # shorter bursts are discarded as noise
     vad_max_ms: 15000 # hard cap per utterance
 
