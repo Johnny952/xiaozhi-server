@@ -48,7 +48,7 @@ Resultado: _(pendiente)_
 
 ## Recordatorios: checklist E2E
 
-Requiere el Milestone 0 aprobado. Agregar al `.env` (lo hace el usuario): `RECORDATORIOS_MAC` (MAC del parlante; vacío = todos los conectados) y `RESUMEN_HORA` (HH:MM, America/Santiago; vacío = sin resumen). Luego `docker compose up -d --build`.
+Requiere el Milestone 0 aprobado. Agregar al `.env` (lo hace el usuario): `RECORDATORIOS_MAC` (MAC del parlante; vacío = todos los conectados) y `RESUMEN_HORA` (HH:MM, America/Santiago; vacío = sin resumen). `RESUMEN_HORA` inválida o `PUSH_TOKEN` vacío hacen que `recordatorios` falle al arrancar con un mensaje claro. Luego `docker compose up -d --build` (`recordatorios` comparte build e imagen con `xiaozhi`).
 
 - [ ] **1.** "Recuérdame en 3 minutos tomar agua": aparece en Nextcloud Tasks, en la lista Recordatorios, con alarma.
 - [ ] **2.** A los 3 minutos aparece el alert en la pantalla.

@@ -55,7 +55,11 @@ services:
     restart: unless-stopped
 
   recordatorios:
-    # Misma imagen que xiaozhi; solo cambia el entrypoint (scheduler de avisos).
+    # Misma imagen que xiaozhi (mismo build y tag); solo cambia el entrypoint
+    # (scheduler de avisos). Con build propio, `up -d` no intenta hacer pull.
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: xiaozhi-server:dev
     entrypoint: ["/app/nextcloud-mcp", "scheduler"]
     environment:
@@ -71,6 +75,7 @@ services:
     volumes:
       - recordatorios-state:/data
     depends_on:
+      - xiaozhi
       - mqtt-gateway
     networks:
       - xiaozhi-net
